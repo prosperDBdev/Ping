@@ -1,0 +1,51 @@
+# --- Secrets -----------------------------------------------------------------
+# First, and not alphabetised, because it is the only section here that matters.
+# Everything else in this file is about keeping the repository tidy. This part
+# is about not publishing credentials that let strangers act as your users.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# --- Java / Maven ------------------------------------------------------------
+target/
+*.jar
+*.war
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# --- Node / Next.js ----------------------------------------------------------
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Editors -----------------------------------------------------------------
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+
+# --- OS ----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs & local scratch ----------------------------------------------------
+*.log
+npm-debug.log*
+yarn-error.log*
+.cache/
+coverage/
+.git.backup-before-monorepo/
+
+# Stray archives found in ping-frontend at first commit — left on disk, not published.
+*.zip

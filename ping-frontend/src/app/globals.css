@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+/* Enable class-based dark mode (`.dark` on <html>) instead of the
+   Tailwind v4 default of following prefers-color-scheme only. This
+   lets ThemeProvider both auto-detect system preference AND let the
+   user override it manually via ThemeToggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-ping-dark: #1c2e36;
+  --color-ping-orange: #d8684c;
+  --color-ping-orange-light: #e5775b;
+  --color-ping-teal: #1c4e44;
+  --color-ping-teal-light: #2a9d8f;
+  --color-ping-cream: #faf6f1;
+  --color-ping-cream-dark: #ece5db;
+  --color-ping-sand: #e3ddd3;
+  --color-ping-sage: #e3efe9;
+  --color-ping-sage-border: #c9dcd2;
+  --color-ping-text: #1c2e36;
+  --color-ping-text-light: #788890;
+  --color-ping-green: #22c55e;
+
+  /* Night mode palette */
+  --color-ping-night-bg: #0c171a;
+  --color-ping-night-surface: #14252a;
+  --color-ping-night-card: #182c32;
+  --color-ping-night-card-active: #1e373e;
+  --color-ping-night-border: #203940;
+  --color-ping-night-sage: #143330;
+  --color-ping-night-text: #e2ece9;
+  --color-ping-night-text-light: #879fa5;
+
+  --font-sans: Inter, system-ui, sans-serif;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 20px;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
