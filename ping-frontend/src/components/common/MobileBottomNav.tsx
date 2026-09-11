@@ -36,7 +36,7 @@ function TabButton({
 
 export default function MobileBottomNav({ active, onHome, onPings, onMoments, onSettings }: MobileBottomNavProps) {
   return (
-    <div className="flex items-center justify-around py-2.5 bg-ping-cream dark:bg-ping-night-card border-t border-ping-sand/60 dark:border-ping-night-border md:hidden">
+    <div className="safe-bottom flex items-center justify-around py-2.5 bg-ping-cream dark:bg-ping-night-card border-t border-ping-sand/60 dark:border-ping-night-border md:hidden">
       <TabButton
         active={active === "home"}
         onClick={onHome}

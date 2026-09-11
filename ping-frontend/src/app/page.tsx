@@ -3,8 +3,51 @@
 import { useRouter } from "next/navigation";
 import PingLogo from "@/components/common/PingLogo";
 import useAuthStore from "@/store/authStore";
+import InstallAppButton from "@/components/pwa/InstallAppButton";
 import { useEffect } from "react";
-import toast, { Toaster } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
+
+/**
+ * The feature list, written from what is actually shipped.
+ *
+ * Kept as data rather than six near-identical JSX blocks so that adding a
+ * feature is one line, and so the copy can be read in one place next to the
+ * claims it makes. Everything here has working code behind it — a landing page
+ * that promises something the app doesn't do is the fastest way to lose the
+ * one visitor who tries it.
+ */
+const BUILT_FEATURES = [
+  {
+    title: "Real-time messaging",
+    body: "Private and group chats over a live connection. Read receipts, unread counts, and who's online — no refreshing.",
+    icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+  },
+  {
+    title: "Voice notes",
+    body: "Hold to record, release to send. For the things that are quicker said than typed.",
+    icon: "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0-4a3 3 0 01-3-3V5a3 3 0 116 0v10a3 3 0 01-3 3z",
+  },
+  {
+    title: "Photos, handled safely",
+    body: "Every image is checked by its actual content and re-encoded before it's stored, so what reaches the other person is pixels and nothing else.",
+    icon: "M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z",
+  },
+  {
+    title: "Temporary chats",
+    body: "Both people have to agree, then the conversation runs on a clock. When it ends, the messages and the files are actually deleted.",
+    icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
+  {
+    title: "24-hour status",
+    body: "Post a thought or a photo that disappears tomorrow. You choose who sees it, and whether anyone can pass it on.",
+    icon: "M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
+  },
+  {
+    title: "Your room, your rules",
+    body: "Block someone and it cuts both ways. Clear a conversation and it clears for you alone — including the files.",
+    icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z",
+  },
+];
 
 export default function Home() {
   const router = useRouter();
@@ -16,9 +59,6 @@ export default function Home() {
     }
   }, [isAuthenticated, router]);
 
-  const notifyOnLaunch = () => {
-    toast.success("We'll let you know the moment the app is ready.", { icon: "📱" });
-  };
 
   const scrollToHowItWorks = () => {
     document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
@@ -296,6 +336,37 @@ export default function Home() {
             </div>
           </div>
 
+          {/* What's actually built — the concrete counterpart to the three cards
+              above. Those carry the voice; this one carries the receipts. */}
+          <section className="mt-24">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#226b5d] mb-2">
+              What&apos;s inside
+            </p>
+            <h2 className="text-2xl font-black tracking-[-0.03em] text-[#1b2f35] sm:text-3xl max-w-xl">
+              Everything here works today.
+            </h2>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-[#505e64]">
+              No waitlist and no placeholder screens — sign in and all of this is there.
+            </p>
+
+            <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {BUILT_FEATURES.map((feature) => (
+                <article
+                  key={feature.title}
+                  className="rounded-2xl bg-white/70 p-5 border border-[#e0d5c6]"
+                >
+                  <div className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-xl bg-[#f4efe8] text-[#e0684b]">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={feature.icon} />
+                    </svg>
+                  </div>
+                  <h3 className="mb-1 text-sm font-bold text-[#1b2f35]">{feature.title}</h3>
+                  <p className="text-xs leading-relaxed text-[#5c696e]">{feature.body}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
           {/* How it works: Chat → Tasks → Events → Files → Workspace */}
           <div id="how-it-works" className="mt-24 border-t border-[#dfd5c7] pt-12 scroll-mt-8">
             <div className="mb-10 max-w-2xl">
@@ -506,18 +577,10 @@ export default function Home() {
                   Find your first circle
                   <span aria-hidden="true">→</span>
                 </button>
-                <button
-                  onClick={notifyOnLaunch}
-                  className="inline-flex items-center gap-2 rounded-full bg-white border border-[#dfd5c7] px-6 py-3.5 text-sm font-bold text-[#1b2f35] transition hover:bg-[#f4efe8]"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-                  </svg>
-                  Download app · Coming soon
-                </button>
+                <InstallAppButton />
               </div>
               <p className="mt-3 text-xs text-[#738086]">
-                The mobile app isn&apos;t out yet — tap to get notified the day it lands.
+                Installs straight from your browser — no App Store, no Play Store, no download.
               </p>
             </div>
           </div>
@@ -530,9 +593,7 @@ export default function Home() {
             <button onClick={scrollToHowItWorks} className="hover:text-[#1b2f35]">
               How it works
             </button>
-            <button onClick={notifyOnLaunch} className="hover:text-[#1b2f35]">
-              Download app
-            </button>
+            <InstallAppButton variant="ghost" />
             <button
               onClick={() => router.push("/auth/register")}
               className="font-semibold text-[#1b2f35] hover:text-[#e0684b]"

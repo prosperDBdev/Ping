@@ -62,3 +62,34 @@ body {
 .dark .scrollbar-thin::-webkit-scrollbar-thumb {
   background: #4b5563;
 }
+/* ---------------------------------------------------------------------------
+   Installed-app (standalone) adjustments.
+
+   In a browser tab the OS reserves space for the address bar and the home
+   indicator, so a page never has to think about the notch. Installed to the
+   home screen, the app owns the entire screen — including the strip behind the
+   iPhone's home bar, where a bottom navigation would otherwise sit half
+   underneath something the user can't move.
+
+   env(safe-area-inset-*) reports those reserved regions. It returns 0 on every
+   device without them, and it only returns anything at all because the root
+   layout sets viewport-fit=cover — without that, these are permanently zero and
+   the padding below silently does nothing.
+
+   Scoped to display-mode: standalone so nothing changes in a normal tab.
+--------------------------------------------------------------------------- */
+@media (display-mode: standalone) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Stops the rubber-band scroll that makes an installed PWA feel like a web
+     page rather than an app when you drag past the end of a list. */
+  body {
+    overscroll-behavior-y: none;
+  }
+}
