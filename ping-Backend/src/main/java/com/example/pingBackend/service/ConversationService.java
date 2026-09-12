@@ -12,9 +12,12 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +37,134 @@ public class ConversationService {
         blockService.assertNotBlocked(currentUserId, participantId);
 
         Conversation conversation = getOrCreatePrivateConversationEntity(currentUserId, participantId);
+        return mapToResponse(conversation, currentUserId);
+    }
+
+    /**
+     * Create a group conversation.
+     *
+     * Unlike createPrivateConversation, this never reuses an existing
+     * conversation. Two people can only have one private thread, so that method
+     * is get-or-create; but two identical groups with the same members are a
+     * perfectly reasonable thing to want, so this always creates a new one.
+     *
+     * The six decisions this method encodes, each of which could defensibly
+     * have gone the other way:
+     *
+     *  1. THE CREATOR IS THE ADMIN. Nothing else sets that field, and
+     *     removeParticipant already refuses to work without it — a group saved
+     *     with a null admin is a group nobody can ever manage.
+     *
+     *  2. THE CREATOR IS A PARTICIPANT. The client sends only the OTHER people.
+     *     Saving that list verbatim would produce a group its own creator
+     *     cannot see: the sidebar query is findByParticipantsContaining, and
+     *     getConversation refuses anyone not in the list. They would create a
+     *     group and watch it vanish.
+     *
+     *  3. DUPLICATES AND SELF-REFERENCES ARE DROPPED, NOT REJECTED. A client
+     *     sending the same person twice, or helpfully including the creator, is
+     *     sloppy rather than malicious, and the user's intent is unambiguous in
+     *     both cases. Rejecting would mean a confusing error for a request
+     *     whose meaning was perfectly clear. This is the opposite call from
+     *     decision 4, and the difference is whether the intent survives the
+     *     correction.
+     *
+     *  4. AN UNKNOWN ID REJECTS THE WHOLE REQUEST. Here the intent does NOT
+     *     survive: silently dropping an id the database doesn't recognise means
+     *     the creator believes they added someone who was never added, and they
+     *     find out weeks later when that person never replies. A failed
+     *     creation they can retry is strictly better than a group that is
+     *     quietly missing a member.
+     *
+     *  5. BLOCKING IS CHECKED CREATOR-TO-MEMBER ONLY. See the comment at the
+     *     check itself — the pairwise alternative leaks other people's blocks.
+     *
+     *  6. EVERY UNREAD COUNT STARTS AT ZERO, including the creator's. The group
+     *     exists but nobody has said anything yet; a badge on an empty room is
+     *     a notification about nothing.
+     */
+    public ConversationResponse createGroupConversation(
+            String currentUserId, String name, List<String> requestedParticipantIds) {
+
+        // DECISION 3 — normalise rather than reject. LinkedHashSet because the
+        // order the creator picked people in is the order they expect to see
+        // them, and a plain HashSet would scramble it for no reason.
+        Set<String> otherMembers = new LinkedHashSet<>(requestedParticipantIds);
+        otherMembers.remove(currentUserId);
+
+        if (otherMembers.isEmpty()) {
+            throw new InvalidMediaException("A group needs at least one other person");
+        }
+
+        // DECISION 4 — every id must resolve to a real account.
+        List<User> found = userRepository.findAllById(otherMembers);
+        if (found.size() != otherMembers.size()) {
+            Set<String> foundIds = found.stream().map(User::getId).collect(Collectors.toSet());
+            String missing = otherMembers.stream()
+                    .filter(id -> !foundIds.contains(id))
+                    .collect(Collectors.joining(", "));
+            throw new InvalidMediaException("These users no longer exist: " + missing);
+        }
+
+        // DECISION 5 — BLOCK-CHECK (3 of 3).
+        //
+        // Only the creator's own relationships are checked. Checking every PAIR
+        // of members instead is tempting and wrong for two reasons. It would
+        // let any user silently veto a group they aren't creating, just by
+        // having blocked someone else in it. And worse, the failure would leak
+        // private information: watching a group creation fail would tell the
+        // creator that two other people have blocked each other, which is
+        // nobody's business but theirs.
+        //
+        // Blocking governs direct contact. A group is a shared room whose
+        // membership its admin chooses, and two people who've blocked each
+        // other ending up in the same room is a social problem, not a security
+        // one — either of them can leave.
+        for (String memberId : otherMembers) {
+            blockService.assertNotBlocked(currentUserId, memberId);
+        }
+
+        // DECISION 2 — creator first, then everyone else.
+        List<String> participants = new ArrayList<>();
+        participants.add(currentUserId);
+        participants.addAll(otherMembers);
+
+        // DECISION 6 — everyone starts with a clean slate.
+        Map<String, Integer> unreadCount = new HashMap<>();
+        participants.forEach(id -> unreadCount.put(id, 0));
+
+        LocalDateTime now = LocalDateTime.now();
+        Conversation conversation = Conversation.builder()
+                .type("GROUP")
+                // Trimmed here rather than trusting the client. @NotBlank
+                // rejects "   " but a name of "  Team  " passes validation and
+                // would be stored with its padding intact.
+                .name(name.trim())
+                .participants(participants)
+                .admin(currentUserId)          // DECISION 1
+                .unreadCount(unreadCount)
+                .clearedAt(new HashMap<>())
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+
+        conversation = conversationRepository.save(conversation);
+
+        String creatorName = userRepository.findById(currentUserId)
+                .map(User::getUsername).orElse("Someone");
+        messageService.saveSystemMessage(
+                conversation.getId(), creatorName + " created \"" + conversation.getName() + "\"");
+
+        // Tell the other members their new group exists, so it appears in their
+        // sidebar without a refresh. Deliberately not sent to the creator —
+        // they get the same conversation back as this method's return value,
+        // and handling it twice is how a duplicate row appears in the list.
+        for (String memberId : otherMembers) {
+            messagingTemplate.convertAndSend(
+                    "/topic/user/" + memberId + "/conversation-created",
+                    mapToResponse(conversation, memberId));
+        }
+
         return mapToResponse(conversation, currentUserId);
     }
 

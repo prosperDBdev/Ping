@@ -1,6 +1,7 @@
 package com.example.pingBackend.controller;
 
 import com.example.pingBackend.dto.request.CreateConversationRequest;
+import com.example.pingBackend.dto.request.CreateGroupRequest;
 import com.example.pingBackend.dto.response.ConversationResponse;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.service.ConversationService;
@@ -32,6 +33,26 @@ public class ConversationController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Create a group conversation.
+     *
+     * The literal "/group" and the "/{id}" mapping below both match a POST to
+     * /api/conversations/group. Spring resolves that in favour of the literal
+     * segment, so this wins — but it's worth knowing the collision is there.
+     * Until this method existed, the request fell through to @GetMapping("/{id}")
+     * with id="group", which is why the browser saw 405 Method Not Allowed
+     * rather than 404: the path matched something, just not for POST.
+     */
+    @PostMapping("/group")
+    public ResponseEntity<ConversationResponse> createGroupConversation(
+            @Valid @RequestBody CreateGroupRequest request,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        ConversationResponse response = conversationService.createGroupConversation(
+                currentUser.getId(), request.getName(), request.getParticipantIds());
+        return ResponseEntity.ok(response);
+    }
+
     // Get all conversations for the current user
     @GetMapping
     public ResponseEntity<List<ConversationResponse>> getUserConversations(
@@ -50,15 +71,6 @@ public class ConversationController {
     ) {
         ConversationResponse response = conversationService
                 .getConversation(id, currentUser.getId());
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/group")
-    public ResponseEntity<ConversationResponse> createGroupConversation(
-            @Valid @RequestBody CreateGroupConversationRequest request,
-            @AuthenticationPrincipal User currentUser
-    ) {
-        ConversationResponse response = conversationService.createGroupConversation(currentUser.getId(), request);
         return ResponseEntity.ok(response);
     }
 
