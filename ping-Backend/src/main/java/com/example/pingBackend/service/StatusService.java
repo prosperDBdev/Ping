@@ -434,10 +434,26 @@ public class StatusService {
      * key is not a permission — see the note on getObjectBytes.
      */
     public DownloadedMedia downloadStatusMedia(String key, User requester) {
-        Status status = statusRepository.findByMediaKey(key)
-                .orElseThrow(() -> new ForbiddenMediaAccessException("Status media not found"));
+        // Every status that uses this object — the original, plus any reshares
+        // of it, since a reshare points at the same key instead of copying the
+        // file. Looking up "the" status for a key is only safe while nothing is
+        // shared; see findAllByMediaKey for how that assumption broke.
+        List<Status> owners = statusRepository.findAllByMediaKey(key);
 
-        if (!canView(status, requester)) {
+        // Same exception for "no such key" as for "not allowed", so the
+        // response can't be used to probe which keys exist.
+        if (owners.isEmpty()) {
+            throw new ForbiddenMediaAccessException("You don't have access to this status");
+        }
+
+        // You may have the bytes if you can see ANY status carrying them. That
+        // is the point of a reshare rather than a loophole: resharing is how an
+        // image legitimately reaches the resharer's contacts, and the original
+        // author already consented through allowResharing when it happened.
+        // Every check still runs through canView — this only asks it more than
+        // once, and stops at the first yes.
+        boolean allowed = owners.stream().anyMatch(status -> canView(status, requester));
+        if (!allowed) {
             throw new ForbiddenMediaAccessException("You don't have access to this status");
         }
 

@@ -6,7 +6,6 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface StatusRepository extends MongoRepository<Status, String> {
@@ -29,8 +28,23 @@ public interface StatusRepository extends MongoRepository<Status, String> {
     List<Status> findByAuthorIdAndExpiresAtAfterOrderByCreatedAtAsc(
             String authorId, LocalDateTime now);
 
-    /** Serving media: resolve a key back to the status that owns it, to authorise the request. */
-    Optional<Status> findByMediaKey(String mediaKey);
+    /**
+     * Serving media: every status that uses this object key.
+     *
+     * A LIST, and it has to be. This used to be Optional<Status> findByMediaKey,
+     * which quietly asserts "one key, one status" — and resharing breaks that
+     * assertion by design, because a reshare reuses the original's R2 object
+     * rather than copying it. The first image reshare put two documents behind
+     * one key, and Spring Data answers a single-result query that matches two
+     * documents not by picking one but by throwing
+     * IncorrectResultSizeDataAccessException. The image stopped loading for
+     * everyone, including the author of the original.
+     *
+     * The lesson generalises: when a design decision allows sharing, every
+     * lookup written under the old one-to-one assumption is now a latent bug,
+     * and none of them fail until the first shared row exists.
+     */
+    List<Status> findAllByMediaKey(String mediaKey);
 
     /**
      * Does any OTHER status still point at this object key?
