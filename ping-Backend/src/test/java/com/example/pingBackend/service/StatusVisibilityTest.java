@@ -48,7 +48,13 @@ class StatusVisibilityTest {
     void setUp() {
         users = new InMemoryUsers();
         BlockService blockService = new BlockService(InMemoryUsers.asRepository(users));
-        service = new StatusService(null, InMemoryUsers.asRepository(users), null, blockService, null);
+        // Every dependency this method shouldn't touch is null, deliberately —
+        // including the messaging ones added for replies. If canSeeStatusesOf
+        // ever starts reaching for them, the test fails loudly instead of
+        // quietly widening what "visibility" depends on.
+        service = new StatusService(
+                null, InMemoryUsers.asRepository(users), null, blockService, null,
+                null, null, null);
     }
 
     // -----------------------------------------------------------------

@@ -80,6 +80,19 @@ public class MessageService {
 
     // Save a new message and update conversation
     public MessageResponse saveMessage(String conversationId, String senderId, String senderUsername, String content, String type, Message.Attachment attachment) {
+        return saveMessage(conversationId, senderId, senderUsername, content, type, attachment, null);
+    }
+
+    /**
+     * Same as above, optionally quoting a status.
+     *
+     * An overload rather than a new method so a status reply goes through
+     * EXACTLY the same checks as any other message — participant, expiry, and
+     * block-check 1 of 3. A separate "saveStatusReply" would be a second path
+     * into the messages collection, and every guard above would have to be
+     * remembered twice.
+     */
+    public MessageResponse saveMessage(String conversationId, String senderId, String senderUsername, String content, String type, Message.Attachment attachment, Message.StatusReply statusReply) {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
@@ -114,6 +127,7 @@ public class MessageService {
                 .content(content)
                 .type(type != null ? type : "TEXT")
                 .attachment(attachment)
+                .statusReply(statusReply)
                 .seenBy(List.of(senderId)) // Sender has seen their own message
                 .build();
 
@@ -268,6 +282,7 @@ public class MessageService {
                 .status(message.getStatus())
                 .seenBy(message.getSeenBy())
                 .attachment(message.getAttachment())
+                .statusReply(message.getStatusReply())
                 .createdAt(message.getCreatedAt())
                 .build();
     }

@@ -4,8 +4,11 @@ import com.example.pingBackend.dto.request.CreateStatusRequest;
 import com.example.pingBackend.dto.request.StatusPrivacyRequest;
 import com.example.pingBackend.dto.response.StatusFeedEntryResponse;
 import com.example.pingBackend.dto.response.StatusResponse;
-import com.example.pingBackend.dto.response.UserResponse;
+import com.example.pingBackend.dto.response.ConversationResponse;
+import com.example.pingBackend.dto.response.MessageResponse;
+import com.example.pingBackend.dto.response.StatusViewerResponse;
 import com.example.pingBackend.model.Conversation;
+import com.example.pingBackend.model.Message;
 import com.example.pingBackend.model.Status;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.ConversationRepository;
@@ -14,12 +17,14 @@ import com.example.pingBackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +60,9 @@ public class StatusService {
     private final ConversationRepository conversationRepository;
     private final BlockService blockService;
     private final MediaStorageService mediaStorageService;
+    private final ConversationService conversationService;
+    private final MessageService messageService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Value("${status.expiry-hours:24}")
     private long expiryHours;
@@ -391,7 +399,7 @@ public class StatusService {
     }
 
     /** Who has opened this status. Author only — it's their information. */
-    public List<UserResponse> getViewers(String statusId, User requester) {
+    public List<StatusViewerResponse> getViewers(String statusId, User requester) {
         Status status = requireStatus(statusId);
         if (!status.getAuthorId().equals(requester.getId())) {
             throw new ForbiddenMediaAccessException("Only the author can see who viewed a status");
@@ -402,14 +410,19 @@ public class StatusService {
             return List.of();
         }
 
+        Map<String, String> reactions = status.getReactions() == null ? Map.of() : status.getReactions();
+
         return userRepository.findAllById(viewerIds).stream()
-                .map(u -> UserResponse.builder()
+                .map(u -> StatusViewerResponse.builder()
                         .id(u.getId())
                         .username(u.getUsername())
                         .avatarUrl(u.getAvatarUrl())
-                        .status(u.getStatus())
-                        .lastSeen(u.getLastSeen())
+                        .reaction(reactions.get(u.getId()))
                         .build())
+                // People who reacted first — they're the ones the author most
+                // wants to see, and a reaction buried under forty silent views
+                // might as well not exist.
+                .sorted(Comparator.comparing((StatusViewerResponse v) -> v.getReaction() == null))
                 .toList();
     }
 
@@ -514,6 +527,151 @@ public class StatusService {
         return toResponse(statusRepository.save(copy), resharer, resharer.getId());
     }
 
+    // ---------------------------------------------------------------------
+    // Reactions and replies
+    // ---------------------------------------------------------------------
+
+    /**
+     * The only reactions accepted.
+     *
+     * An allow-list, not "any emoji". The value is client-supplied text that
+     * gets stored and later rendered in the author's viewer list, and "any
+     * string that looks like an emoji" is not a check anyone can write
+     * correctly — emoji are arbitrary sequences of code points, joiners and
+     * modifiers. Without a fixed set, a reaction field is just a free-text box
+     * with no length limit, one per viewer, on every status.
+     *
+     * Note the heart includes U+FE0F, the variation selector that makes it
+     * render as colour. The frontend sends these exact strings from buttons,
+     * so they match; a user typing a heart from their own keyboard might not.
+     */
+    private static final Set<String> ALLOWED_REACTIONS =
+            Set.of("❤️", "😂", "😮", "😢", "👏", "🔥");
+
+    /**
+     * React to a status, or take a reaction back.
+     *
+     * Sending the SAME emoji again removes it; sending a different one replaces
+     * it. A toggle, because that's what tapping a reaction you already chose
+     * means in every app people use.
+     *
+     * Reactions are visible to the author only. Showing them to every viewer
+     * would turn a private "I liked this" into a public one, and would let
+     * viewers see each other — including people one of them has hidden their
+     * own status from. The viewer list is already author-only for the same
+     * reason; reactions just follow it.
+     */
+    public StatusResponse react(String statusId, User viewer, String emoji) {
+        Status status = requireStatus(statusId);
+
+        // Visibility first, as everywhere else in this class. A status you
+        // can't see is a status you can't react to, and checking the emoji
+        // first would reveal the status exists through a different error.
+        if (!canView(status, viewer)) {
+            throw new ForbiddenMediaAccessException("You don't have access to this status");
+        }
+        if (status.getAuthorId().equals(viewer.getId())) {
+            throw new InvalidMediaException("You can't react to your own status");
+        }
+        if (emoji == null || !ALLOWED_REACTIONS.contains(emoji)) {
+            throw new InvalidMediaException("That reaction isn't supported");
+        }
+
+        if (status.getReactions() == null) {
+            status.setReactions(new HashMap<>());
+        }
+        if (emoji.equals(status.getReactions().get(viewer.getId()))) {
+            status.getReactions().remove(viewer.getId());
+        } else {
+            status.getReactions().put(viewer.getId(), emoji);
+        }
+
+        // Reacting to something is proof you saw it. Without this, a viewer who
+        // reacts from a client that failed to send the view receipt would show
+        // up with a reaction but not in the "viewed by" list.
+        if (status.getViewerIds() == null) {
+            status.setViewerIds(new ArrayList<>());
+        }
+        if (!status.getViewerIds().contains(viewer.getId())) {
+            status.getViewerIds().add(viewer.getId());
+        }
+
+        Status saved = statusRepository.save(status);
+        User author = userRepository.findById(saved.getAuthorId()).orElse(null);
+        return toResponse(saved, author, viewer.getId());
+    }
+
+    /**
+     * Reply to a status. The reply is a PRIVATE MESSAGE to the author.
+     *
+     * Not a comment thread, and this is the decision the whole feature rests
+     * on. A public comment section on a status would put every commenter in
+     * front of every other viewer, and the visibility rule stops being
+     * enforceable the moment that happens: two people who have blocked each
+     * other would meet in the comments of a mutual friend's post, and someone
+     * hidden from your statuses would still see your friends talking about
+     * them. There is no consistent way to filter a shared thread per viewer.
+     *
+     * A private reply sidesteps all of it, because it goes into a conversation
+     * that already has every rule it needs. It is also how WhatsApp does it,
+     * which is why it feels right to people.
+     */
+    public MessageResponse reply(String statusId, User viewer, String text) {
+        Status status = requireStatus(statusId);
+
+        if (!canView(status, viewer)) {
+            throw new ForbiddenMediaAccessException("You don't have access to this status");
+        }
+        if (status.getAuthorId().equals(viewer.getId())) {
+            throw new InvalidMediaException("You can't reply to your own status");
+        }
+
+        // Get-or-create the 1:1 thread. This also runs block-check 2 of 3, and
+        // saveMessage below runs block-check 1 — so a reply is guarded by the
+        // visibility rule AND both messaging checks. Redundant by design: this
+        // path writes into someone's inbox.
+        ConversationResponse conversation =
+                conversationService.createPrivateConversation(viewer.getId(), status.getAuthorId());
+
+        Message.StatusReply quote = Message.StatusReply.builder()
+                .statusId(status.getId())
+                .statusAuthorId(status.getAuthorId())
+                .statusType(status.getType() != null ? status.getType().name() : null)
+                .snippet(snippetOf(status))
+                .backgroundColor(status.getBackgroundColor())
+                .build();
+
+        MessageResponse saved = messageService.saveMessage(
+                conversation.getId(), viewer.getId(), viewer.getUsername(),
+                text.trim(), "TEXT", null, quote);
+
+        // Same fan-out as a message sent from the chat screen: the open
+        // conversation, and each participant's session-wide inbox.
+        messagingTemplate.convertAndSend("/topic/conversation/" + conversation.getId(), saved);
+        for (String participantId : List.of(viewer.getId(), status.getAuthorId())) {
+            messagingTemplate.convertAndSend("/topic/user/" + participantId + "/inbox", saved);
+            // If this reply just CREATED the thread, neither sidebar knows it
+            // exists yet, and an inbox message for an unknown conversation has
+            // nowhere to go. The client upserts, so sending this when the
+            // thread already existed is harmless.
+            messagingTemplate.convertAndSend(
+                    "/topic/user/" + participantId + "/conversation-created",
+                    conversationService.getConversation(conversation.getId(), participantId));
+        }
+
+        return saved;
+    }
+
+    /** What a reply's quote card shows. Trimmed so a 700-character status doesn't become a 700-character quote. */
+    private static String snippetOf(Status status) {
+        String text = status.getText();
+        if (text == null || text.isBlank()) {
+            return status.getType() == Status.Type.IMAGE ? "Photo" : "Status";
+        }
+        String trimmed = text.trim();
+        return trimmed.length() <= 120 ? trimmed : trimmed.substring(0, 117) + "...";
+    }
+
     /** Delete your own status early. */
     public void deleteStatus(String statusId, User requester) {
         Status status = requireStatus(statusId);
@@ -586,6 +744,7 @@ public class StatusService {
     private StatusResponse toResponse(Status status, User author, String viewerId) {
         boolean isAuthor = status.getAuthorId().equals(viewerId);
         List<String> viewers = status.getViewerIds();
+        Map<String, String> reactions = status.getReactions();
 
         return StatusResponse.builder()
                 .id(status.getId())
@@ -603,6 +762,11 @@ public class StatusService {
                 .resharedFromAuthorId(status.getResharedFromAuthorId())
                 .resharedFromAuthorUsername(status.getResharedFromAuthorUsername())
                 .reshareable(author != null && allowsResharing(author))
+                // Your own reaction is yours to see; everyone else's are the
+                // author's. The raw map never leaves the server.
+                .myReaction(reactions == null ? null : reactions.get(viewerId))
+                .reactionCount(isAuthor ? (reactions == null ? 0 : reactions.size()) : null)
                 .build();
     }
+
 }

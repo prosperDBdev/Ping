@@ -1,6 +1,11 @@
 package com.example.pingBackend.controller;
 
 import com.example.pingBackend.dto.request.CreateStatusRequest;
+import com.example.pingBackend.dto.request.StatusReactionRequest;
+import com.example.pingBackend.dto.request.StatusReplyRequest;
+import com.example.pingBackend.dto.response.MessageResponse;
+import com.example.pingBackend.dto.response.StatusViewerResponse;
+import jakarta.validation.Valid;
 import com.example.pingBackend.dto.request.StatusPrivacyRequest;
 import com.example.pingBackend.dto.response.StatusFeedEntryResponse;
 import com.example.pingBackend.dto.response.StatusResponse;
@@ -111,10 +116,28 @@ public class StatusController {
     }
 
     @GetMapping("/{id}/viewers")
-    public ResponseEntity<List<UserResponse>> getViewers(
+    public ResponseEntity<List<StatusViewerResponse>> getViewers(
             @PathVariable String id,
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(statusService.getViewers(id, currentUser));
+    }
+
+    /** React to a status. Sending the same emoji again removes it. */
+    @PostMapping("/{id}/react")
+    public ResponseEntity<StatusResponse> react(
+            @PathVariable String id,
+            @RequestBody StatusReactionRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(statusService.react(id, currentUser, request.getEmoji()));
+    }
+
+    /** Reply to a status. Lands as a private message in your chat with the author. */
+    @PostMapping("/{id}/reply")
+    public ResponseEntity<MessageResponse> reply(
+            @PathVariable String id,
+            @Valid @RequestBody StatusReplyRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(statusService.reply(id, currentUser, request.getText()));
     }
 
     @PostMapping("/{id}/reshare")

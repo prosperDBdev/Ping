@@ -146,6 +146,39 @@ export default function MessageBubble({
                 <path d="M16 3a1 1 0 01.894.553l1 2A1 1 0 0117 7v4.586l3.707 3.707A1 1 0 0120 17h-6v4a1 1 0 11-2 0v-4H6a1 1 0 01-.707-1.707L9 11.586V7a1 1 0 01.106-.447l1-2A1 1 0 0111 4h5a1 1 0 010-2z" />
               </svg>
             )}
+            {/* Reply to a status. In a private chat the only other person is
+                the author, so a reply you didn't send was always to YOUR
+                status. The colour bar is the status's own background, copied
+                at reply time — the status itself is long gone by tomorrow. */}
+            {message.statusReply && (
+              <div
+                className={`mb-2 rounded-lg overflow-hidden flex items-stretch text-xs ${
+                  isMine ? "bg-white/15" : "bg-black/5 dark:bg-white/5"
+                }`}
+              >
+                <div
+                  className="w-1 flex-shrink-0"
+                  style={{ backgroundColor: message.statusReply.backgroundColor ?? "#1F7A6C" }}
+                />
+                <div className="px-2.5 py-1.5 min-w-0">
+                  <p
+                    className={`font-bold text-[11px] ${
+                      isMine ? "text-white/90" : "text-ping-teal dark:text-ping-teal-light"
+                    }`}
+                  >
+                    {isMine ? "You replied to their status" : "Replied to your status"}
+                  </p>
+                  <p
+                    className={`truncate ${
+                      isMine ? "text-white/75" : "text-ping-dark/60 dark:text-ping-night-text/60"
+                    }`}
+                  >
+                    {message.statusReply.statusType === "IMAGE" ? "📷 " : ""}
+                    {message.statusReply.snippet}
+                  </p>
+                </div>
+              </div>
+            )}
             {quoted && (
               <div
                 className={`mb-1.5 pl-2 border-l-2 text-xs leading-snug ${

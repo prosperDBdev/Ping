@@ -75,6 +75,8 @@ export interface Message {
   status: string;
   seenBy: string[];
   attachment: MessageAttachment | null;
+  /** Present when this message was sent as a reply to a status. */
+  statusReply?: StatusReply | null;
   createdAt: string;
 }
 
@@ -200,6 +202,32 @@ export interface Status {
   resharedFromAuthorId: string | null;
   resharedFromAuthorUsername: string | null;
   reshareable: boolean;
+  /** Your own reaction to this status, if you've left one. */
+  myReaction: string | null;
+  /** Author-only — null when you're not the author, like viewerCount. */
+  reactionCount: number | null;
+}
+
+/**
+ * The quote card on a message that replied to a status.
+ *
+ * A snapshot rather than a link: the status is gone after 24 hours, and the
+ * reply is not, so this carries just enough to keep showing what was replied to.
+ */
+export interface StatusReply {
+  statusId: string;
+  statusAuthorId: string;
+  statusType: StatusType | null;
+  snippet: string;
+  backgroundColor: string | null;
+}
+
+/** Someone who viewed your status, as only you — the author — can see. */
+export interface StatusViewer {
+  id: string;
+  username: string;
+  avatarUrl: string | null;
+  reaction: string | null;
 }
 
 export interface StatusFeedEntry {

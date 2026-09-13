@@ -41,6 +41,34 @@ public class Message {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    /**
+     * Set when this message is a reply to someone's status.
+     *
+     * A SNAPSHOT, not a reference, and that's the point. The status this quotes
+     * is deleted 24 hours after it was posted, but the reply lives in a chat
+     * forever. If this held only a statusId, every status reply in every
+     * conversation would turn into a dangling pointer overnight — a quote card
+     * with nothing to show. Copying the few fields the quote needs means the
+     * reply keeps its context after the thing it replied to is gone.
+     *
+     * Deliberately no media key. Copying one in would let the chat try to fetch
+     * a status image after the status expired, which the media endpoint rightly
+     * refuses. A label saying it was a photo is honest; a broken image is not.
+     */
+    private StatusReply statusReply;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StatusReply {
+        private String statusId;
+        private String statusAuthorId;
+        private String statusType;       // TEXT or IMAGE
+        private String snippet;          // the status text, trimmed for display
+        private String backgroundColor;  // TEXT statuses only
+    }
+
     @Data
     @Builder
     @NoArgsConstructor

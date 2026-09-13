@@ -24,5 +24,6 @@ public class MessageResponse {
     private String status;
     private List<String> seenBy;
     private Message.Attachment attachment;
+    private Message.StatusReply statusReply;
     private LocalDateTime createdAt;
 }

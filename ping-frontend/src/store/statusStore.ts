@@ -7,6 +7,8 @@ import {
   fetchMyStatuses,
   fetchStatusFeed,
   markStatusViewed,
+  reactToStatus,
+  replyToStatus,
   reshareStatus as reshareStatusApi,
 } from "@/lib/status";
 
@@ -20,8 +22,22 @@ interface StatusState {
   postText: (text: string, backgroundColor: string) => Promise<void>;
   postImage: (file: File, caption: string) => Promise<void>;
   markViewed: (statusId: string) => Promise<void>;
+  react: (statusId: string, emoji: string) => Promise<void>;
+  reply: (statusId: string, text: string) => Promise<void>;
   reshare: (statusId: string) => Promise<void>;
   remove: (statusId: string) => Promise<void>;
+}
+
+/** Apply a change to one status wherever it appears in the feed. */
+function patchFeed(
+  feed: StatusFeedEntry[],
+  statusId: string,
+  patch: (s: Status) => Status
+): StatusFeedEntry[] {
+  return feed.map((entry) => {
+    const statuses = entry.statuses.map((s) => (s.id === statusId ? patch(s) : s));
+    return { ...entry, statuses, hasUnviewed: statuses.some((s) => !s.viewed) };
+  });
 }
 
 const useStatusStore = create<StatusState>((set, get) => ({
@@ -32,9 +48,8 @@ const useStatusStore = create<StatusState>((set, get) => ({
 
   /**
    * The feed and your own statuses are fetched together because the UI shows
-   * them in one row — "Your status" sits at the head of the same list of
-   * rings, and loading them separately would make that row assemble in two
-   * visible steps.
+   * them in one view — "Your status" sits at the head of the same list, and
+   * loading them separately would make it assemble in two visible steps.
    */
   load: async () => {
     set({ isLoading: true });
@@ -59,27 +74,61 @@ const useStatusStore = create<StatusState>((set, get) => ({
   /**
    * Marked viewed optimistically.
    *
-   * The ring turning grey the instant you open something is the whole point of
-   * the interaction, and waiting for a round-trip to do it feels broken. If
-   * the call fails the next load() corrects it — the cost of being briefly
-   * wrong about a read receipt is nothing, unlike being wrong about who can
-   * see a post, which is why that decision is never made here.
+   * The ring greying out the instant you open something is the whole point of
+   * the interaction, and waiting for a round-trip to do it feels broken. If the
+   * call fails the next load() corrects it — the cost of being briefly wrong
+   * about a read receipt is nothing, unlike being wrong about who can see a
+   * post, which is why that decision is never made here.
    */
   markViewed: async (statusId: string) => {
-    set((state) => ({
-      feed: state.feed.map((entry) => {
-        const statuses = entry.statuses.map((s) =>
-          s.id === statusId ? { ...s, viewed: true } : s
-        );
-        return { ...entry, statuses, hasUnviewed: statuses.some((s) => !s.viewed) };
-      }),
-    }));
-
+    set((state) => ({ feed: patchFeed(state.feed, statusId, (s) => ({ ...s, viewed: true })) }));
     try {
       await markStatusViewed(statusId);
     } catch {
       // Deliberately silent — see above.
     }
+  },
+
+  /**
+   * Also optimistic, but NOT silent on failure.
+   *
+   * The toggle is mirrored locally so the tap feels instant — same emoji as
+   * the current one clears it, anything else replaces it. But unlike a read
+   * receipt, a reaction is something the user chose to express: if the server
+   * rejects it, quietly leaving the old state on screen would tell them their
+   * reaction landed when it didn't. So the previous value is restored and the
+   * error is rethrown for the viewer to show.
+   */
+  react: async (statusId: string, emoji: string) => {
+    const previous = get()
+      .feed.flatMap((e) => e.statuses)
+      .find((s) => s.id === statusId)?.myReaction ?? null;
+    const next = previous === emoji ? null : emoji;
+
+    set((state) => ({
+      feed: patchFeed(state.feed, statusId, (s) => ({ ...s, myReaction: next, viewed: true })),
+    }));
+
+    try {
+      const updated = await reactToStatus(statusId, emoji);
+      set((state) => ({
+        feed: patchFeed(state.feed, statusId, (s) => ({ ...s, myReaction: updated.myReaction })),
+      }));
+    } catch (err) {
+      set((state) => ({
+        feed: patchFeed(state.feed, statusId, (s) => ({ ...s, myReaction: previous })),
+      }));
+      throw err;
+    }
+  },
+
+  /**
+   * Nothing in this store changes on a reply. It becomes a chat message, and
+   * the chat store hears about it over the WebSocket like any other message —
+   * so there's no status-side state to keep in step.
+   */
+  reply: async (statusId: string, text: string) => {
+    await replyToStatus(statusId, text);
   },
 
   reshare: async (statusId: string) => {

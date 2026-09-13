@@ -41,4 +41,8 @@ public class StatusResponse {
     private String resharedFromAuthorUsername;
     /** False when the author has resharing turned off — the UI hides the button. */
     private boolean reshareable;
+    /** The requesting user's own reaction, if any — so they can see what they picked. */
+    private String myReaction;
+    /** Author-only, like viewerCount; null when someone else is looking. */
+    private Integer reactionCount;
 }

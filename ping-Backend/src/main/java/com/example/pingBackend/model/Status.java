@@ -10,7 +10,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A 24-hour status post.
@@ -103,6 +105,19 @@ public class Status {
      */
     @Builder.Default
     private List<String> viewerIds = new ArrayList<>();
+
+    /**
+     * Reactions, keyed by the reacting user's id.
+     *
+     * A map rather than a list of (user, emoji) pairs because the rule is ONE
+     * reaction per person — reacting again replaces it. A map makes that rule
+     * structural: there is no way to store two reactions from the same user, so
+     * no code path can forget to deduplicate.
+     *
+     * Visible only to the author. See StatusService.react for why.
+     */
+    @Builder.Default
+    private Map<String, String> reactions = new HashMap<>();
 
     /**
      * Set when this status is a reshare of someone else's.
