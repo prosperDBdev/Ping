@@ -120,7 +120,7 @@ export default function DashboardPage() {
         onSelectConversations={() => router.push("/chat")}
         onNewChat={() => router.push("/chat?view=new-private")}
         onNewGroup={() => router.push("/chat?view=new-group")}
-        onOpenSettings={() => router.push("/chat?view=settings")}
+        onOpenSettings={() => router.push("/settings")}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -152,7 +152,7 @@ export default function DashboardPage() {
               <ThemeToggle variant="pill" />
             </div>
             <button
-              onClick={() => router.push("/chat?view=settings")}
+              onClick={() => router.push("/settings")}
               className="relative"
               aria-label="Profile & settings"
             >
@@ -164,7 +164,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div data-swipe-page className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8">
             {/* Greeting */}
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-ping-teal dark:text-ping-teal-light mb-1.5">
@@ -394,13 +394,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <MobileBottomNav
-          active="home"
-          onHome={() => {}}
-          onPings={() => router.push("/chat")}
-          onMoments={() => router.push("/status")}
-          onSettings={() => router.push("/chat?view=settings")}
-        />
+        <MobileBottomNav active="home" />
       </div>
     </div>
   );

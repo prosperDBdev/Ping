@@ -15,7 +15,6 @@ import ChatHeader from "@/components/chat/ChatHeader";
 import MessageBubble from "@/components/chat/MessageBubble";
 import MessageInput, { SentImageAttachment, SentVoiceAttachment } from "@/components/chat/MessageInput";
 import ConversationInfoPanel from "@/components/chat/ConversationInfoPanel";
-import ProfileSettingsPanel from "@/components/settings/ProfileSettingsPanel";
 import WorkspaceTabs from "@/components/workspace/WorkspaceTabs";
 import TasksPanel from "@/components/workspace/TasksPanel";
 import EventsPanel from "@/components/workspace/EventsPanel";
@@ -40,7 +39,7 @@ import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { parseReplyQuote, snippetFor } from "@/lib/messageActions";
 
-type MainView = "inbox" | "new-private" | "new-group" | "settings";
+type MainView = "inbox" | "new-private" | "new-group";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -78,12 +77,19 @@ export default function ChatPage() {
   const [mainView, setMainView] = useState<MainView>(() => {
     if (typeof window === "undefined") return "inbox";
     const view = new URLSearchParams(window.location.search).get("view");
-    return view === "new-private" || view === "new-group" || view === "settings" ? view : "inbox";
+    return view === "new-private" || view === "new-group" ? view : "inbox";
   });
+
+  // Settings moved to its own route. Old /chat?view=settings links — bookmarks,
+  // an installed app's cached start page — still land in the right place.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "settings") {
+      router.replace("/settings");
+    }
+  }, [router]);
   const [typingUser, setTypingUser] = useState<TypingEvent | null>(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mobileTab, setMobileTab] = useState<"home" | "pings" | "moments" | "settings">("pings");
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [workspaceSection, setWorkspaceSection] = useState<WorkspaceSection>("messages");
 
@@ -256,7 +262,6 @@ export default function ChatPage() {
 
   const goToInbox = useCallback(() => {
     setMainView("inbox");
-    setMobileTab("pings");
   }, []);
 
   const handleSelectConversation = useCallback(
@@ -472,7 +477,7 @@ export default function ChatPage() {
           onSelectConversations={goToInbox}
           onNewChat={() => setMainView("new-private")}
           onNewGroup={() => setMainView("new-group")}
-          onOpenSettings={() => setMainView("settings")}
+          onOpenSettings={() => router.push("/settings")}
         />
 
         {mainView === "new-private" || mainView === "new-group" ? (
@@ -482,8 +487,6 @@ export default function ChatPage() {
             onConversationCreated={handleConversationCreated}
             onInviteTemporary={inviteToTemporaryChat}
           />
-        ) : mainView === "settings" ? (
-          <ProfileSettingsPanel onBack={goToInbox} />
         ) : (
           <>
             {/* Middle — Conversation List & Desktop Header Area */}
@@ -491,6 +494,7 @@ export default function ChatPage() {
               // Width is only applied from md upward: on mobile the list is
               // full-width and the drag handle isn't rendered at all, so a
               // pixel width from a previous desktop session mustn't leak in.
+              data-swipe-page
               style={sidebarWidthStyle}
               className={`w-full bg-ping-cream dark:bg-ping-night-surface border-r border-ping-sand/60 dark:border-ping-night-border flex flex-col flex-shrink-0 ${
                 showMobileChat ? "hidden md:flex" : "flex"
@@ -504,7 +508,7 @@ export default function ChatPage() {
                   <div className="flex items-center gap-2">
                     <ThemeToggle variant="pill" />
                     <button
-                      onClick={() => setMainView("settings")}
+                      onClick={() => router.push("/settings")}
                       className="relative"
                     >
                       <div className="w-8 h-8 bg-slate-400 dark:bg-slate-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs">
@@ -555,7 +559,7 @@ export default function ChatPage() {
                     />
                     {/* Profile dropdown */}
                     <button
-                      onClick={() => setMainView("settings")}
+                      onClick={() => router.push("/settings")}
                       className="flex items-center gap-1.5"
                     >
                       <div className="relative">
@@ -703,16 +707,10 @@ export default function ChatPage() {
               </div>
 
               {/* Mobile Bottom Navigation Bar */}
-              <MobileBottomNav
-                active={mobileTab === "home" ? "home" : mobileTab}
-                onHome={() => router.push("/dashboard")}
-                onPings={() => setMobileTab("pings")}
-                onMoments={() => setMobileTab("moments")}
-                onSettings={() => {
-                  setMobileTab("settings");
-                  setMainView("settings");
-                }}
-              />
+              {/* Swiping is off while a conversation is open: a sideways flick
+                  there is someone reading or replying, and it must never throw
+                  them out of the chat onto another tab. */}
+              <MobileBottomNav active="pings" swipeEnabled={!showMobileChat} />
             </div>
 
             {/* Drag handle between the conversation list and the chat.

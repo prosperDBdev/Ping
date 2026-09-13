@@ -39,6 +39,9 @@ export default function ConfirmDialog({
 
   return (
     <div
+      // Only mounted while open, so this can't permanently disable swiping —
+      // it just stops a flick near the buttons from changing tabs mid-decision.
+      data-no-swipe
       className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"

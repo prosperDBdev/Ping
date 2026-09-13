@@ -77,7 +77,9 @@ export default function StatusComposer({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+    // data-no-swipe: a composer is a text box and a colour row — sideways
+    // movement here is typing and picking, never navigation.
+    <div data-no-swipe className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-ping-night-card rounded-2xl border border-ping-sand/60 dark:border-ping-night-border w-full max-w-md overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-ping-sand/60 dark:border-ping-night-border">
           <p className="text-sm font-bold text-ping-dark dark:text-ping-night-text">New status</p>

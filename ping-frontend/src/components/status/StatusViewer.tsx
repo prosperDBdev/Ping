@@ -221,7 +221,10 @@ export default function StatusViewer({
   // --- render -------------------------------------------------------------
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    // data-no-swipe: the viewer has its own left/right meaning (previous and
+    // next status). Without this, a flick meant to reach the next status would
+    // also throw the user onto a different tab.
+    <div data-no-swipe className="fixed inset-0 z-50 bg-black flex flex-col">
       <style>{`@keyframes statusProgress { from { transform: scaleX(0) } to { transform: scaleX(1) } }`}</style>
 
       {/* Progress — one bar per slide in this person's set */}

@@ -47,7 +47,9 @@ export default function Sheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    // data-no-swipe: a sheet returns null when closed, so this only exists while
+    // one is open — and while it is, sideways movement belongs to its contents.
+    <div data-no-swipe className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <div
         className={`absolute inset-0 bg-ping-dark/40 dark:bg-black/60 transition-opacity duration-200 ${
           entered ? "opacity-100" : "opacity-0"

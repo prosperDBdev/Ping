@@ -69,7 +69,7 @@ export default function MemoriesPage() {
         onSelectConversations={() => router.push("/chat")}
         onNewChat={() => router.push("/chat?view=new-private")}
         onNewGroup={() => router.push("/chat?view=new-group")}
-        onOpenSettings={() => router.push("/chat?view=settings")}
+        onOpenSettings={() => router.push("/settings")}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

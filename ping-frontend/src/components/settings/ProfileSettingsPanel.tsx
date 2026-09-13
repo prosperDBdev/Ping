@@ -84,7 +84,7 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
   };
 
   return (
-    <div className="flex-1 h-full overflow-y-auto scrollbar-thin bg-ping-cream dark:bg-ping-night-bg px-6 sm:px-10 py-8">
+    <div className="flex-1 h-full overflow-y-auto scrollbar-thin bg-ping-cream dark:bg-ping-night-bg px-4 sm:px-10 py-6 sm:py-8">
       {onBack && (
         <button
           onClick={onBack}
@@ -237,7 +237,9 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
       </div>
 
       {isEditing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        // data-no-swipe: while this is open, a sideways flick is someone
+        // editing their name, not asking to change tabs.
+        <div data-no-swipe className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white dark:bg-ping-night-card rounded-2xl w-full max-w-sm p-6 shadow-xl">
             <h3 className="text-lg font-bold text-ping-dark dark:text-ping-night-text mb-4">
               Edit profile
