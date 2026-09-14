@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.example.pingBackend.exception.NotFoundException;
+import com.example.pingBackend.exception.GoneException;
 
 @Service
 @RequiredArgsConstructor
@@ -29,17 +31,17 @@ public class MessageService {
 
         // Verify user is a participant
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!conversation.getParticipants().contains(userId)) {
-            throw new RuntimeException("You are not a participant in this conversation");
+            throw new NotFoundException("Conversation not found");
         }
 
         // An expired temporary conversation's history is gone as far as the
         // API is concerned, even in the window before the cleanup job has
         // physically deleted it.
         if (ConversationService.isExpired(conversation, LocalDateTime.now())) {
-            throw new RuntimeException("This temporary conversation has expired");
+            throw new GoneException("This temporary conversation has expired");
         }
 
         Pageable pageable = PageRequest.of(page, size);
@@ -68,10 +70,10 @@ public class MessageService {
      */
     public void clearConversation(String conversationId, String userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!conversation.getParticipants().contains(userId)) {
-            throw new RuntimeException("You are not a participant in this conversation");
+            throw new NotFoundException("Conversation not found");
         }
 
         conversation.getClearedAt().put(userId, LocalDateTime.now());
@@ -95,18 +97,18 @@ public class MessageService {
     public MessageResponse saveMessage(String conversationId, String senderId, String senderUsername, String content, String type, Message.Attachment attachment, Message.StatusReply statusReply) {
 
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         // Sending was previously unchecked — a conversation ID alone was
         // enough to post into any conversation, including one you were never
         // part of. Same rule as reading: participants only.
         if (!conversation.getParticipants().contains(senderId)) {
-            throw new RuntimeException("You are not a participant in this conversation");
+            throw new NotFoundException("Conversation not found");
         }
 
         // Nothing new lands in a temporary conversation past its expiry.
         if (ConversationService.isExpired(conversation, LocalDateTime.now())) {
-            throw new RuntimeException("This temporary conversation has expired");
+            throw new GoneException("This temporary conversation has expired");
         }
 
         // BLOCK-CHECK (1 of 3) — the one that matters most.
@@ -166,7 +168,7 @@ public class MessageService {
      */
     public MessageResponse saveSystemMessage(String conversationId, String content) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         Message message = Message.builder()
                 .conversationId(conversationId)
@@ -201,14 +203,14 @@ public class MessageService {
      */
     public List<ConversationMediaResponse> getConversationMedia(String conversationId, String userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!conversation.getParticipants().contains(userId)) {
-            throw new RuntimeException("You are not a participant in this conversation");
+            throw new NotFoundException("Conversation not found");
         }
 
         if (ConversationService.isExpired(conversation, LocalDateTime.now())) {
-            throw new RuntimeException("This temporary conversation has expired");
+            throw new GoneException("This temporary conversation has expired");
         }
 
         // Same per-user clear marker the message list honours. Missing it here

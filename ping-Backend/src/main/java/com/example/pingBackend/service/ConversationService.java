@@ -20,6 +20,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.example.pingBackend.exception.BadRequestException;
+import com.example.pingBackend.exception.ForbiddenException;
+import com.example.pingBackend.exception.NotFoundException;
+import com.example.pingBackend.exception.GoneException;
 
 @Service
 @RequiredArgsConstructor
@@ -95,7 +99,7 @@ public class ConversationService {
         otherMembers.remove(currentUserId);
 
         if (otherMembers.isEmpty()) {
-            throw new InvalidMediaException("A group needs at least one other person");
+            throw new BadRequestException("A group needs at least one other person");
         }
 
         // DECISION 4 — every id must resolve to a real account.
@@ -105,7 +109,7 @@ public class ConversationService {
             String missing = otherMembers.stream()
                     .filter(id -> !foundIds.contains(id))
                     .collect(Collectors.joining(", "));
-            throw new InvalidMediaException("These users no longer exist: " + missing);
+            throw new BadRequestException("These users no longer exist: " + missing);
         }
 
         // DECISION 5 — BLOCK-CHECK (3 of 3).
@@ -175,21 +179,21 @@ public class ConversationService {
      */
     public void removeParticipant(String conversationId, String requesterId, String targetUserId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!"GROUP".equals(conversation.getType())) {
-            throw new RuntimeException("Only group conversations have members to remove");
+            throw new BadRequestException("Only group conversations have members to remove");
         }
         // Authorisation, not just membership: being in the group is not the
         // same as being allowed to remove people from it.
         if (!requesterId.equals(conversation.getAdmin())) {
-            throw new RuntimeException("Only the group admin can remove members");
+            throw new ForbiddenException("Only the group admin can remove members");
         }
         if (targetUserId.equals(conversation.getAdmin())) {
-            throw new RuntimeException("The admin can't be removed from their own group");
+            throw new BadRequestException("The admin can't be removed from their own group");
         }
         if (!conversation.getParticipants().contains(targetUserId)) {
-            throw new RuntimeException("That user isn't in this group");
+            throw new BadRequestException("That user isn't in this group");
         }
 
         // The list from Mongo may be immutable depending on how it was
@@ -245,7 +249,7 @@ public class ConversationService {
      */
     Conversation getOrCreatePrivateConversationEntity(String userId1, String userId2) {
         userRepository.findById(userId2)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         return conversationRepository.findPrivateConversation(userId1, userId2)
                 .orElseGet(() -> {
@@ -274,7 +278,7 @@ public class ConversationService {
      */
     Conversation createTemporaryConversationEntity(String userId1, String userId2, LocalDateTime expiresAt) {
         userRepository.findById(userId2)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         Map<String, Integer> unreadCount = new HashMap<>();
         unreadCount.put(userId1, 0);
@@ -307,14 +311,14 @@ public class ConversationService {
     // Get a specific conversation
     public ConversationResponse getConversation(String conversationId, String userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!conversation.getParticipants().contains(userId)) {
-            throw new RuntimeException("You are not a participant in this conversation");
+            throw new NotFoundException("Conversation not found");
         }
 
         if (isExpired(conversation, LocalDateTime.now())) {
-            throw new RuntimeException("This temporary conversation has expired");
+            throw new GoneException("This temporary conversation has expired");
         }
 
         return mapToResponse(conversation, userId);

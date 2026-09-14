@@ -8,6 +8,7 @@ import com.example.pingBackend.repository.UserRepository;
 import com.example.pingBackend.security.JwtTokenProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import com.example.pingBackend.exception.ConflictException;
+import com.example.pingBackend.exception.TooManyRequestsException;
+import com.example.pingBackend.exception.InvalidCredentialsException;
 
 @Service
 @RequiredArgsConstructor
@@ -71,36 +75,54 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
 
-        // 1. Check if username already taken
+        // 1. Friendly checks first — these give the specific message almost everyone
+        //    sees. 409 Conflict: the request is fine, it clashes with an existing account.
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username is already taken");
+            throw new ConflictException("That username is already taken");
         }
 
-        // 2. Check if email already taken
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email is already in use");
+        // Compared ignoring case: Maya@x.com and maya@x.com are the same inbox.
+        if (userRepository.existsByEmailIgnoringCase(request.getEmail())) {
+            throw new ConflictException("An account with that email already exists");
         }
 
-        // 3. Create new user with hashed password
+        // 2. Create new user with hashed password
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))  // ← Hash it!
                 .build();
 
-        // 4. Save to MongoDB
-        User savedUser = userRepository.save(user);
+        // 3. Save.
+        //
+        // The checks above can't stop two people signing up with the same username
+        // at the same instant — both are told "not taken" before either has saved.
+        // The unique index in UserIndexConfig does: the database refuses the second
+        // insert, and that refusal becomes the same 409 instead of a crash.
+        User savedUser;
+        try {
+            savedUser = userRepository.save(user);
+        } catch (DuplicateKeyException e) {
+            throw duplicateAccount(e);
+        }
 
-        // 5. Generate JWT token
+        // 4. Generate JWT token
         String token = jwtTokenProvider.generateToken(savedUser.getUsername());
 
-        // 6. Return response with token
+        // 5. Return response with token
         return AuthResponse.builder()
                 .token(token)
                 .id(savedUser.getId())
                 .username(savedUser.getUsername())
                 .email(savedUser.getEmail())
                 .build();
+    }
+
+    /** Which unique index refused the insert decides which message the user sees. */
+    private static ConflictException duplicateAccount(DuplicateKeyException e) {
+        return String.valueOf(e.getMessage()).contains("users_email_unique")
+                ? new ConflictException("An account with that email already exists")
+                : new ConflictException("That username is already taken");
     }
 
     public AuthResponse login(LoginRequest request, String clientIp) {

@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -22,10 +21,12 @@ public class User {
     @Id                          // ← MongoDB will auto-generate this ID
     private String id;
 
-    @Indexed(unique = true)      // ← No two users can have the same username
+    // Unique — enforced by an index created in UserIndexConfig. (An @Indexed
+    // annotation used to sit here, but automatic index creation is off in this
+    // project, so it never created anything and usernames weren't really unique.)
     private String username;
 
-    @Indexed(unique = true)      // ← No two users can have the same email
+    // Unique ignoring case — also enforced in UserIndexConfig.
     private String email;
 
     private String password;     // ← Stored as BCrypt hash, NEVER plain text

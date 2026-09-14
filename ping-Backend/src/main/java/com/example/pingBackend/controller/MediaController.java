@@ -3,8 +3,6 @@ package com.example.pingBackend.controller;
 import com.example.pingBackend.dto.response.MediaUploadResponse;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.service.DownloadedMedia;
-import com.example.pingBackend.service.ForbiddenMediaAccessException;
-import com.example.pingBackend.service.InvalidMediaException;
 import com.example.pingBackend.service.MediaStorageService;
 import com.example.pingBackend.service.StoredMedia;
 import lombok.RequiredArgsConstructor;

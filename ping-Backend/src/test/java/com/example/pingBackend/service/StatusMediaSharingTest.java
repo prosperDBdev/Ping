@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.example.pingBackend.exception.ForbiddenMediaAccessException;
 
 /**
  * Regression test for status images shared between an original and its reshares.

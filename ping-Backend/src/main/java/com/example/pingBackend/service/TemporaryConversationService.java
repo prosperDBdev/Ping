@@ -13,6 +13,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.example.pingBackend.exception.BadRequestException;
+import com.example.pingBackend.exception.NotFoundException;
+import com.example.pingBackend.exception.ConflictException;
+import com.example.pingBackend.exception.GoneException;
 
 @Service
 @RequiredArgsConstructor
@@ -33,13 +37,13 @@ public class TemporaryConversationService {
 
     public TemporaryChatInviteResponse createInvite(String fromUserId, String toUserId, long durationMs, String durationLabel) {
         if (fromUserId.equals(toUserId)) {
-            throw new RuntimeException("You can't start a temporary conversation with yourself");
+            throw new BadRequestException("You can't start a temporary conversation with yourself");
         }
 
         User fromUser = userRepository.findById(fromUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
         userRepository.findById(toUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         TemporaryConversationInvite invite = TemporaryConversationInvite.builder()
                 .fromUserId(fromUserId)
@@ -85,23 +89,23 @@ public class TemporaryConversationService {
 
     public InviteOutcome respondToInvite(String inviteId, String respondingUserId, boolean accept) {
         TemporaryConversationInvite invite = inviteRepository.findById(inviteId)
-                .orElseThrow(() -> new RuntimeException("Invite not found"));
+                .orElseThrow(() -> new NotFoundException("Invite not found"));
 
         if (!invite.getToUserId().equals(respondingUserId)) {
-            throw new RuntimeException("This invite isn't addressed to you");
+            throw new NotFoundException("Invite not found");
         }
         if (!"PENDING".equals(invite.getStatus())) {
-            throw new RuntimeException("This invite has already been responded to");
+            throw new ConflictException("This invite has already been responded to");
         }
         // Enforced here too, not just in the listing query — otherwise a stale
         // invite is merely hidden from the UI while still being acceptable by
         // ID over the WebSocket.
         if (invite.getCreatedAt().isBefore(LocalDateTime.now().minusHours(INVITE_VALIDITY_HOURS))) {
-            throw new RuntimeException("This invite has expired");
+            throw new GoneException("This invite has expired");
         }
 
         User responder = userRepository.findById(respondingUserId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         if (!accept) {
             invite.setStatus("DECLINED");

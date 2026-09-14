@@ -24,6 +24,8 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import com.example.pingBackend.exception.TooManyRequestsException;
+import com.example.pingBackend.exception.InvalidPasswordResetException;
 
 /**
  * Forgot password: request a link, then use it to set a new password.

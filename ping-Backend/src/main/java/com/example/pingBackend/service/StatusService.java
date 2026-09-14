@@ -33,6 +33,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.example.pingBackend.exception.TooManyRequestsException;
+import com.example.pingBackend.exception.ForbiddenMediaAccessException;
+import com.example.pingBackend.exception.InvalidMediaException;
 
 /**
  * Everything to do with 24-hour statuses.
@@ -314,7 +317,7 @@ public class StatusService {
         long recent = statusRepository.countByAuthorIdAndCreatedAtAfter(
                 authorId, LocalDateTime.now().minusHours(24));
         if (recent >= maxPerUserPerDay) {
-            throw new InvalidMediaException(
+            throw new TooManyRequestsException(
                     "You've reached the limit of " + maxPerUserPerDay + " statuses in 24 hours");
         }
     }

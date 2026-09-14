@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import com.example.pingBackend.exception.BadRequestException;
+import com.example.pingBackend.exception.NotFoundException;
+import com.example.pingBackend.exception.BlockedUserException;
 
 @Service
 @RequiredArgsConstructor
@@ -16,13 +19,13 @@ public class BlockService {
 
     public void block(String blockerId, String blockedId) {
         if (blockerId.equals(blockedId)) {
-            throw new RuntimeException("You can't block yourself");
+            throw new BadRequestException("You can't block yourself");
         }
 
         User blocker = userRepository.findById(blockerId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
         userRepository.findById(blockedId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         // Same null case as blocks(): a user document written before this
         // field existed has no list to add to.
@@ -37,7 +40,7 @@ public class BlockService {
 
     public void unblock(String blockerId, String blockedId) {
         User blocker = userRepository.findById(blockerId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         if (blocker.getBlockedUsers() != null && blocker.getBlockedUsers().remove(blockedId)) {
             userRepository.save(blocker);

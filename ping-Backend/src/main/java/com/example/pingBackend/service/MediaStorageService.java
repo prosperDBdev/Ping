@@ -29,6 +29,9 @@ import java.io.UncheckedIOException;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
+import com.example.pingBackend.exception.NotFoundException;
+import com.example.pingBackend.exception.ForbiddenMediaAccessException;
+import com.example.pingBackend.exception.InvalidMediaException;
 
 /**
  * Validates and stores a recorded voice note in object storage (Cloudflare R2).
@@ -482,10 +485,10 @@ public class MediaStorageService {
      */
     public DownloadedMedia downloadVoiceNote(String key, String requesterId) {
         Message message = messageRepository.findByAttachment_Key(key)
-                .orElseThrow(() -> new RuntimeException("Media not found"));
+                .orElseThrow(() -> new NotFoundException("Media not found"));
 
         Conversation conversation = conversationRepository.findById(message.getConversationId())
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         if (!conversation.getParticipants().contains(requesterId)) {
             throw new ForbiddenMediaAccessException("You don't have access to this file");

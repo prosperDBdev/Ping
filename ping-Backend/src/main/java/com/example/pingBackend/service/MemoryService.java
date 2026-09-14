@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import com.example.pingBackend.exception.NotFoundException;
 
 @Service
 @RequiredArgsConstructor
@@ -25,10 +26,10 @@ public class MemoryService {
     // Save a message as a memory for the current user.
     public MemoryResponse createMemory(String userId, String messageId, String category) {
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new RuntimeException("Message not found"));
+                .orElseThrow(() -> new NotFoundException("Message not found"));
 
         Conversation conversation = conversationRepository.findById(message.getConversationId())
-                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
 
         // Same access-control shape as the media download endpoint: a message
         // ID isn't a permission, so confirm the requester is actually a
@@ -36,7 +37,7 @@ public class MemoryService {
         // save (or, in listMemories/deleteMemory, read or remove) anything
         // tied to it.
         if (!conversation.getParticipants().contains(userId)) {
-            throw new RuntimeException("You don't have access to this message");
+            throw new NotFoundException("Message not found");
         }
 
         Memory memory = Memory.builder()
@@ -53,10 +54,10 @@ public class MemoryService {
     // Delete a memory — only its owner may remove it.
     public void deleteMemory(String userId, String memoryId) {
         Memory memory = memoryRepository.findById(memoryId)
-                .orElseThrow(() -> new RuntimeException("Memory not found"));
+                .orElseThrow(() -> new NotFoundException("Memory not found"));
 
         if (!memory.getUserId().equals(userId)) {
-            throw new RuntimeException("You don't have access to this memory");
+            throw new NotFoundException("Memory not found");
         }
 
         memoryRepository.deleteById(memoryId);

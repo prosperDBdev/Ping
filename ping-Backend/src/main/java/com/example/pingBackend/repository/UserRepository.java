@@ -2,6 +2,7 @@ package com.example.pingBackend.repository;
 
 import com.example.pingBackend.model.User;
 import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -24,6 +25,17 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     // Check if email already exists (for registration)
     boolean existsByEmail(String email);
+
+    /**
+     * Does an account with this email exist, ignoring upper/lower case?
+     *
+     * Uses the SAME comparison rule (collation strength 2) as the unique index in
+     * UserIndexConfig, so this check and the database's own rule can never disagree
+     * about what counts as "the same email". ?0 is bound as a value, never pasted
+     * into the query text, so nothing in an email can change what the query does.
+     */
+    @Query(value = "{ 'email': ?0 }", collation = "{ 'locale': 'en', 'strength': 2 }", exists = true)
+    boolean existsByEmailIgnoringCase(String email);
 
     // Search users by partial username (for "find people to chat with")
     // "ohn" would find "john", "johnny", etc.
