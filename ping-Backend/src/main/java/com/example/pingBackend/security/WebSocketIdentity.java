@@ -12,10 +12,11 @@ import java.security.Principal;
  * after checking the login token — so it's the server's own conclusion about
  * who this connection belongs to, not something the browser asserted.
  *
- * Deliberately NOT principal.getName(). For this token type getName() falls back
- * to calling toString() on the User object, and Lombok's @Data toString includes
- * every field — the password hash among them. Reading the id directly avoids
- * that ever leaking into a log line or a topic name.
+ * Reads the id straight off the User rather than relying on principal.getName().
+ * The WebSocket principal is named by id (see StompAuthChannelInterceptor), but a
+ * plain Spring token answers getName() with the User's toString() — which, with
+ * Lombok's @Data, includes the password hash. Reading the id directly means this
+ * helper is correct whichever kind of token it's handed.
  */
 public final class WebSocketIdentity {
 

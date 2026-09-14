@@ -34,18 +34,24 @@ import java.util.regex.Pattern;
  *
  *   SEND       — only from a connection that authenticated.
  *
- * Before this class existed the server trusted a "userId" header the browser
- * chose. That's the difference between a door that checks ID and a door where
- * you just say your name.
+ * Note this only checks at the moment of subscribing. Access that is later taken
+ * away (being removed from a group) is revoked separately — see
+ * SubscriptionRevoker.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
-    // Every topic the backend broadcasts to has one of exactly these two shapes.
+    // Every topic the backend broadcasts to has one of exactly these shapes.
+    //
+    // The conversation pattern lists its sub-topics exactly rather than allowing
+    // anything after the id. An exact list means SubscriptionRevoker knows every
+    // topic a member could possibly be listening on, so revoking access can't
+    // miss one.
     private static final Pattern USER_TOPIC = Pattern.compile("^/topic/user/([^/]+)(/[^/]+)*$");
-    private static final Pattern CONVERSATION_TOPIC = Pattern.compile("^/topic/conversation/([^/]+)(/[^/]+)*$");
+    private static final Pattern CONVERSATION_TOPIC =
+            Pattern.compile("^/topic/conversation/([^/]+)(/typing|/read)?$");
 
     private final TokenAuthenticator tokenAuthenticator;
     private final ConversationRepository conversationRepository;
@@ -79,7 +85,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return new MessageDeliveryException("Unauthorized");
         });
 
-        accessor.setUser(new UsernamePasswordAuthenticationToken(user, null, Collections.emptyList()));
+        accessor.setUser(new UserIdAuthentication(user));
     }
 
     private String requireUser(StompHeaderAccessor accessor) {
@@ -125,7 +131,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return user.group(1).equals(userId);
         }
 
-        // /topic/conversation/{id}/... — only conversations you're part of.
+        // /topic/conversation/{id}[/typing|/read] — only conversations you're part of.
         Matcher conversation = CONVERSATION_TOPIC.matcher(destination);
         if (conversation.matches()) {
             return conversationRepository.findById(conversation.group(1))
@@ -134,5 +140,30 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         return false;
+    }
+
+    /**
+     * The identity attached to a live connection, named by the user's id.
+     *
+     * Spring uses the principal's NAME to track who is connected (SimpUserRegistry)
+     * and to route /user/... destinations. The plain token would answer getName()
+     * by calling toString() on the User object — and Lombok's @Data toString
+     * includes every field, the password hash among them. That string would have
+     * become this user's key inside Spring's registry. Naming the principal by id
+     * keeps the hash out of it, and gives SubscriptionRevoker a key it can look
+     * users up by.
+     */
+    static final class UserIdAuthentication extends UsernamePasswordAuthenticationToken {
+        private final String userId;
+
+        UserIdAuthentication(User user) {
+            super(user, null, Collections.emptyList());
+            this.userId = user.getId();
+        }
+
+        @Override
+        public String getName() {
+            return userId;
+        }
     }
 }

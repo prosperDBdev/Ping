@@ -2,6 +2,7 @@ package com.example.pingBackend.exception;
 
 import com.example.pingBackend.service.BlockedUserException;
 import com.example.pingBackend.service.ForbiddenMediaAccessException;
+import com.example.pingBackend.service.InvalidCredentialsException;
 import com.example.pingBackend.service.InvalidMediaException;
 import com.example.pingBackend.service.InvalidPasswordResetException;
 import com.example.pingBackend.service.TooManyRequestsException;
@@ -48,6 +49,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenMediaAccessException.class)
     public ResponseEntity<Map<String, String>> handleForbiddenMedia(ForbiddenMediaAccessException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("message", ex.getMessage()));
+    }
+
+    /**
+     * 401 — the sign-in details were wrong. Not 403 (that means "we know who you
+     * are and the answer is no") and not 500 (nothing broke).
+     */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("message", ex.getMessage()));
     }
 

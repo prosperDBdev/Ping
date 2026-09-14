@@ -7,6 +7,7 @@ import com.example.pingBackend.model.Conversation;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.ConversationRepository;
 import com.example.pingBackend.repository.UserRepository;
+import com.example.pingBackend.security.SubscriptionRevoker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class ConversationService {
     private final BlockService blockService;
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SubscriptionRevoker subscriptionRevoker;
 
     // Create or get existing private conversation
     public ConversationResponse createPrivateConversation(String currentUserId, String participantId) {
@@ -203,6 +205,14 @@ public class ConversationService {
         conversation.setUpdatedAt(LocalDateTime.now());
 
         conversationRepository.save(conversation);
+
+        // Removing them from the participant list stops NEW subscriptions — the
+        // subscribe check reads that list. It does nothing to the ones already
+        // open, which would keep delivering every message until they reconnect.
+        // So cancel those now, and before the system message below is broadcast,
+        // so the removed member doesn't even receive the note about their removal
+        // through the group topic (they get their own notification instead).
+        subscriptionRevoker.revokeConversation(targetUserId, conversationId);
 
         String adminName = userRepository.findById(requesterId)
                 .map(User::getUsername).orElse("An admin");

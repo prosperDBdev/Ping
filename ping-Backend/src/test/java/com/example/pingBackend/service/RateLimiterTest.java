@@ -110,4 +110,29 @@ class RateLimiterTest {
         limiter.evictIdleKeys();
         assertEquals(1, limiter.trackedKeys());
     }
+    @Test
+    @DisplayName("release gives back exactly one attempt")
+    void releaseRefundsOne() {
+        limiter.tryAcquire("k", 2, Duration.ofHours(1));
+        limiter.tryAcquire("k", 2, Duration.ofHours(1));
+        assertFalse(limiter.tryAcquire("k", 2, Duration.ofHours(1)));
+        limiter.release("k");
+        assertTrue(limiter.tryAcquire("k", 2, Duration.ofHours(1)));
+        assertFalse(limiter.tryAcquire("k", 2, Duration.ofHours(1)));
+    }
+
+    @Test
+    @DisplayName("reset forgets a key's history entirely")
+    void resetClears() {
+        for (int i = 0; i < 3; i++) limiter.tryAcquire("k", 3, Duration.ofHours(1));
+        limiter.reset("k");
+        for (int i = 0; i < 3; i++) assertTrue(limiter.tryAcquire("k", 3, Duration.ofHours(1)));
+    }
+
+    @Test
+    @DisplayName("releasing a key that has nothing recorded is harmless")
+    void releaseEmptyIsSafe() {
+        limiter.release("never-used");
+        assertEquals(0, limiter.trackedKeys());
+    }
 }

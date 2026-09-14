@@ -33,8 +33,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        AuthResponse response = authService.login(request);
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        AuthResponse response = authService.login(request, clientIp(http));
         return ResponseEntity.ok(response);
     }
 
@@ -62,17 +62,18 @@ public class AuthController {
     }
 
     /**
-     * The caller's IP address, for per-IP rate limits.
+     * The caller's real IP address, for per-IP rate limits.
      *
-     * getRemoteAddr is the address that actually connected to this server. That's
-     * right locally. Behind a hosting platform's proxy (Render, for instance) it
-     * would be the PROXY's address for every user — so everyone would share one
-     * rate limit. The real address then arrives in the X-Forwarded-For header,
-     * but that header must only be trusted from the proxy: anyone can send it,
-     * and a limiter that believes it can be dodged by making up a new IP on every
-     * request. When deploying, set server.forward-headers-strategy=native so the
-     * server resolves this from the trusted proxy rather than trusting the header
-     * directly.
+     * With server.forward-headers-strategy=native (application.properties),
+     * getRemoteAddr already accounts for a hosting platform's proxy: Tomcat reads
+     * X-Forwarded-For, but ONLY when the connection comes from a trusted internal
+     * proxy address. That condition is the security. X-Forwarded-For is just a
+     * header, and anyone can send one — a limiter that believed it from anywhere
+     * could be dodged by inventing a new IP on every request. Trusted only from the
+     * load balancer, it can't be forged by the client.
+     *
+     * Deliberately not reading the header here directly — that would bypass the
+     * trust check and bring the forgery problem straight back.
      */
     private static String clientIp(HttpServletRequest request) {
         return request.getRemoteAddr();

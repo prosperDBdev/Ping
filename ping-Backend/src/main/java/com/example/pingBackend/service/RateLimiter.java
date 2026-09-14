@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     and would need a shared store like Redis
  *
  * MEMORY. Every distinct key costs memory, and an attacker can invent keys
- * (a new fake email per request). Two defences: the per-IP limit caps how fast
+ * (a new fake email per request). Two defences: the per-IP limits cap how fast
  * one client can create keys, and evictIdleKeys drops keys nobody has used
  * recently so the map can't grow forever.
  */
@@ -77,6 +77,26 @@ public class RateLimiter {
         });
 
         return allowed[0];
+    }
+
+    /**
+     * Give back one attempt that turned out not to count.
+     *
+     * Used for sign-in: every attempt reserves a slot up front (so a burst of
+     * simultaneous guesses can't all squeeze past the limit), and an attempt
+     * that SUCCEEDS hands its slot back — a person typing the right password
+     * shouldn't use up their allowance for wrong ones.
+     */
+    public void release(String key) {
+        attempts.computeIfPresent(key, (k, recent) -> {
+            recent.pollLast();
+            return recent.isEmpty() ? null : recent;
+        });
+    }
+
+    /** Forget a key's history entirely. */
+    public void reset(String key) {
+        attempts.remove(key);
     }
 
     @Scheduled(fixedRate = 600_000) // every 10 minutes
