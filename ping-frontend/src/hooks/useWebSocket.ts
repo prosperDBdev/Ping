@@ -15,7 +15,7 @@ import {
 
 export default function useWebSocket() {
   const clientRef = useRef<Client | null>(null);
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const {
     activeConversation,
     addMessage,
@@ -46,9 +46,10 @@ export default function useWebSocket() {
 
   // Connect to WebSocket
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !token) return;
 
-    const client = createStompClient(user.id);
+    // The login token, not the user id — the server works out who we are from it.
+    const client = createStompClient(token);
     clientRef.current = client;
 
     client.onConnect = () => {
@@ -133,7 +134,7 @@ export default function useWebSocket() {
       subscriptionsRef.current.clear();
       setIsConnected(false);
     };
-  }, [user?.id]);
+  }, [user?.id, token]);
 
   // Subscribe to active conversation
   useEffect(() => {

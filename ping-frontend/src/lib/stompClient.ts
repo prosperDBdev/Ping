@@ -13,15 +13,30 @@ const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:8080/w
 
 let stompClient: Client | null = null;
 
-export const createStompClient = (userId: string): Client => {
-  // Disconnect existing client if any
+/**
+ * Open the live connection, proving who we are with the login token.
+ *
+ * This used to send `userId` in the connect headers — and the server believed
+ * it. Anyone could type in someone else's id and be treated as them: shown as
+ * online, sending messages in their name. Now the connection carries the same
+ * token the REST API uses, and the server works out the user from that token
+ * itself. There is nothing left for the browser to claim.
+ *
+ * The token goes in the STOMP CONNECT frame rather than the WebSocket handshake
+ * because browsers don't let JavaScript set an Authorization header on a
+ * WebSocket handshake. The CONNECT frame is the first thing the server reads
+ * after the socket opens, so it's the earliest point the token can be checked.
+ */
+export const createStompClient = (token: string): Client => {
   if (stompClient && stompClient.active) {
     stompClient.deactivate();
   }
 
   stompClient = new Client({
     webSocketFactory: () => new SockJS(WEBSOCKET_URL) as WebSocket,
-    connectHeaders: {},
+    connectHeaders: {
+      Authorization: `Bearer ${token}`,
+    },
     reconnectDelay: 5000,
     debug: (str) => {
       if (str.includes("SEND") || str.includes("MESSAGE") || str.includes("CONNECTED")) {
@@ -29,19 +44,6 @@ export const createStompClient = (userId: string): Client => {
       }
     },
   });
-
-  // Add userId to STOMP connect headers
-  const originalBeforeConnect = stompClient.beforeConnect;
-  stompClient.beforeConnect = () => {
-    if (stompClient) {
-      stompClient.connectHeaders = {
-        userId: userId,
-      };
-    }
-    if (originalBeforeConnect && stompClient) {
-      (originalBeforeConnect as (client: Client) => void)(stompClient);
-    }
-  };
 
   return stompClient;
 };

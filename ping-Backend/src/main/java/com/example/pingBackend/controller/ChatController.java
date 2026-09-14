@@ -6,7 +6,8 @@ import com.example.pingBackend.model.Message;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.ConversationRepository;
 import com.example.pingBackend.repository.UserRepository;
-import com.example.pingBackend.security.WebSocketSessionRegistry;
+import com.example.pingBackend.security.WebSocketIdentity;
+import com.example.pingBackend.service.PresenceService;
 import com.example.pingBackend.service.MessageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.socket.messaging.SessionConnectEvent;
+import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.time.LocalDateTime;
@@ -33,17 +34,18 @@ public class ChatController {
     private final MessageService messageService;
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
-    private final WebSocketSessionRegistry sessionRegistry;
+    private final PresenceService presenceService;
 
     // Handle incoming chat messages
     @MessageMapping("/chat.send")
     public void sendMessage(@Payload SendMessageRequest request, SimpMessageHeaderAccessor headerAccessor) {
 
-        String sessionId = headerAccessor.getSessionId();
-        String userId = sessionRegistry.getUserId(sessionId);
+        // Identity comes from the token verified at CONNECT (see
+        // StompAuthChannelInterceptor) — never from anything inside the message.
+        String userId = WebSocketIdentity.userIdOf(headerAccessor.getUser());
 
         if (userId == null) {
-            log.warn("Message from unknown session: {}", sessionId);
+            log.warn("Message from unauthenticated session: {}", headerAccessor.getSessionId());
             return;
         }
 
@@ -100,15 +102,17 @@ public class ChatController {
     @MessageMapping("/chat.typing")
     public void handleTyping(@Payload Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
 
-        String sessionId = headerAccessor.getSessionId();
-        String userId = sessionRegistry.getUserId(sessionId);
-
+        String userId = WebSocketIdentity.userIdOf(headerAccessor.getUser());
         if (userId == null) return;
 
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) return;
 
         String conversationId = payload.get("conversationId");
+        // Only participants may broadcast into a conversation. Without this, any
+        // logged-in user could make typing indicators or read receipts appear in
+        // chats they aren't part of, just by naming the conversation's id.
+        if (!isParticipant(conversationId, userId)) return;
 
         HashMap<String, Object> typingEvent = new HashMap<>();
         typingEvent.put("userId", userId);
@@ -125,12 +129,14 @@ public class ChatController {
     @MessageMapping("/chat.read")
     public void handleRead(@Payload Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
 
-        String sessionId = headerAccessor.getSessionId();
-        String userId = sessionRegistry.getUserId(sessionId);
-
+        String userId = WebSocketIdentity.userIdOf(headerAccessor.getUser());
         if (userId == null) return;
 
         String conversationId = payload.get("conversationId");
+        // Only participants may broadcast into a conversation. Without this, any
+        // logged-in user could make typing indicators or read receipts appear in
+        // chats they aren't part of, just by naming the conversation's id.
+        if (!isParticipant(conversationId, userId)) return;
 
         messageService.markAsRead(conversationId, userId);
 
@@ -145,68 +151,40 @@ public class ChatController {
         );
     }
 
-    // WebSocket connect event
+    /**
+     * A connection has been accepted.
+     *
+     * SessionConnectedEvent, not SessionConnectEvent: this one fires only after
+     * the server has accepted the CONNECT — that is, after
+     * StompAuthChannelInterceptor verified the token and attached the user. So
+     * event.getUser() is the server's own conclusion about who this is.
+     *
+     * The old handler read a "userId" header the browser chose, which let anyone
+     * mark any account online and then act as it.
+     */
     @EventListener
-    public void handleWebSocketConnect(SessionConnectEvent event) {
-        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.wrap(event.getMessage());
-        String sessionId = headers.getSessionId();
+    public void handleWebSocketConnect(SessionConnectedEvent event) {
+        String userId = WebSocketIdentity.userIdOf(event.getUser());
+        if (userId == null) return;
 
-        // Get userId from native headers (sent by client on connect)
-        Map<String, Object> nativeHeaders = headers.getMessageHeaders();
-        @SuppressWarnings("unchecked")
-        Map<String, List<String>> nativeHeaderMap =
-                (Map<String, List<String>>) nativeHeaders.get("nativeHeaders");
-
-        if (nativeHeaderMap != null && nativeHeaderMap.containsKey("userId")) {
-            String userId = nativeHeaderMap.get("userId").get(0);
-            sessionRegistry.register(sessionId, userId);
-
-            // Set user status to ONLINE
-            userRepository.findById(userId).ifPresent(user -> {
-                user.setStatus("ONLINE");
-                userRepository.save(user);
-
-                // Broadcast online status
-                HashMap<String, Object> statusEvent = new HashMap<>();
-                statusEvent.put("userId", userId);
-                statusEvent.put("status", "ONLINE");
-
-                messagingTemplate.convertAndSend(
-                        "/topic/user/" + userId + "/status",
-                        (Object) statusEvent
-                );
-            });
-
-            log.info("User {} connected (session: {})", userId, sessionId);
-        }
+        String sessionId = SimpMessageHeaderAccessor.wrap(event.getMessage()).getSessionId();
+        presenceService.connected(userId, sessionId);
+        log.info("User {} connected (session: {})", userId, sessionId);
     }
 
-    // WebSocket disconnect event
     @EventListener
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
-        String sessionId = event.getSessionId();
-        String userId = sessionRegistry.unregister(sessionId);
+        String userId = WebSocketIdentity.userIdOf(event.getUser());
+        if (userId == null) return;
 
-        if (userId != null) {
-            // Set user status to OFFLINE
-            userRepository.findById(userId).ifPresent(user -> {
-                user.setStatus("OFFLINE");
-                user.setLastSeen(LocalDateTime.now());
-                userRepository.save(user);
+        presenceService.disconnected(userId, event.getSessionId());
+        log.info("User {} disconnected (session: {})", userId, event.getSessionId());
+    }
 
-                // Broadcast offline status
-                HashMap<String, Object> statusEvent = new HashMap<>();
-                statusEvent.put("userId", userId);
-                statusEvent.put("status", "OFFLINE");
-                statusEvent.put("lastSeen", LocalDateTime.now().toString());
-
-                messagingTemplate.convertAndSend(
-                        "/topic/user/" + userId + "/status",
-                        (Object) statusEvent
-                );
-            });
-
-            log.info("User {} disconnected", userId);
-        }
+    private boolean isParticipant(String conversationId, String userId) {
+        if (conversationId == null) return false;
+        return conversationRepository.findById(conversationId)
+                .map(c -> c.getParticipants() != null && c.getParticipants().contains(userId))
+                .orElse(false);
     }
 }

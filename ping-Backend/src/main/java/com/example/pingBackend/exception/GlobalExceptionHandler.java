@@ -3,6 +3,8 @@ package com.example.pingBackend.exception;
 import com.example.pingBackend.service.BlockedUserException;
 import com.example.pingBackend.service.ForbiddenMediaAccessException;
 import com.example.pingBackend.service.InvalidMediaException;
+import com.example.pingBackend.service.InvalidPasswordResetException;
+import com.example.pingBackend.service.TooManyRequestsException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -46,6 +48,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenMediaAccessException.class)
     public ResponseEntity<Map<String, String>> handleForbiddenMedia(ForbiddenMediaAccessException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("message", ex.getMessage()));
+    }
+
+    /** 429 — the caller is doing something too often. Retrying immediately won't help. */
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<Map<String, String>> handleTooManyRequests(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("message", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidPasswordResetException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidPasswordReset(InvalidPasswordResetException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("message", ex.getMessage()));
     }
 

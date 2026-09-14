@@ -77,6 +77,13 @@ public class User {
     @Builder.Default
     private Boolean allowResharing = Boolean.TRUE;
 
+    /**
+     * When the password last changed. Any login token issued before this moment
+     * is refused (see TokenAuthenticator) — which is how a password reset logs a
+     * thief out of every device they were signed in on. Null means never changed.
+     */
+    private LocalDateTime passwordChangedAt;
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }

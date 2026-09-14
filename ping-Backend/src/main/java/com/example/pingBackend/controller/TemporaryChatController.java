@@ -6,7 +6,7 @@ import com.example.pingBackend.dto.response.ConversationResponse;
 import com.example.pingBackend.dto.response.TemporaryChatInviteResponse;
 import com.example.pingBackend.dto.response.TemporaryChatResponseNotification;
 import com.example.pingBackend.model.Conversation;
-import com.example.pingBackend.security.WebSocketSessionRegistry;
+import com.example.pingBackend.security.WebSocketIdentity;
 import com.example.pingBackend.service.ConversationService;
 import com.example.pingBackend.service.TemporaryConversationService;
 import lombok.RequiredArgsConstructor;
@@ -25,13 +25,12 @@ public class TemporaryChatController {
     private final SimpMessagingTemplate messagingTemplate;
     private final TemporaryConversationService temporaryConversationService;
     private final ConversationService conversationService;
-    private final WebSocketSessionRegistry sessionRegistry;
 
     // The proposer sends this; nothing is created yet — just a pending
     // invite the recipient has to see and act on.
     @MessageMapping("/temp-chat.invite")
     public void invite(@Payload TemporaryChatInviteRequest request, SimpMessageHeaderAccessor headerAccessor) {
-        String fromUserId = sessionRegistry.getUserId(headerAccessor.getSessionId());
+        String fromUserId = WebSocketIdentity.userIdOf(headerAccessor.getUser());
         if (fromUserId == null) return;
 
         TemporaryChatInviteResponse invite;
@@ -56,7 +55,7 @@ public class TemporaryChatController {
     // client needs to refetch their conversation list to see it appear.
     @MessageMapping("/temp-chat.respond")
     public void respond(@Payload TemporaryChatRespondRequest request, SimpMessageHeaderAccessor headerAccessor) {
-        String respondingUserId = sessionRegistry.getUserId(headerAccessor.getSessionId());
+        String respondingUserId = WebSocketIdentity.userIdOf(headerAccessor.getUser());
         if (respondingUserId == null) return;
 
         TemporaryConversationService.InviteOutcome outcome;

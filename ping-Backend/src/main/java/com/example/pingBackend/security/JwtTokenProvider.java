@@ -1,6 +1,7 @@
 package com.example.pingBackend.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Optional;
 
 @Component
 public class JwtTokenProvider {
@@ -48,6 +50,25 @@ public class JwtTokenProvider {
                 .getPayload();
 
         return claims.getSubject();
+    }
+
+    /**
+     * Verify the signature and expiry, and return everything inside the token in
+     * one go — or empty if it's forged, tampered with, or expired.
+     *
+     * Parsing once and reading several claims from the result avoids verifying
+     * the same signature twice (once to validate, again to read the subject).
+     */
+    public Optional<Claims> parseClaims(String token) {
+        try {
+            return Optional.of(Jwts.parser()
+                    .verifyWith(key)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload());
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     // VALIDATE a token — is it real and not expired?

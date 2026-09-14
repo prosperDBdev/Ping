@@ -1,6 +1,5 @@
 package com.example.pingBackend.security;
 
-import com.example.pingBackend.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,12 +14,23 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 
+/**
+ * Authenticates REST requests from the "Authorization: Bearer ..." header.
+ *
+ * The actual decision — is this token good, and whose is it — lives in
+ * TokenAuthenticator, shared with the WebSocket interceptor. This filter only
+ * reads the header and records the result. Keeping the rule out of here is what
+ * guarantees REST and WebSocket can never disagree about a token again.
+ *
+ * A missing or bad token doesn't stop the request here. It simply isn't
+ * authenticated, and SecurityConfig then decides: public endpoints carry on,
+ * everything else gets a 401 from the authentication entry point.
+ */
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private final JwtTokenProvider jwtTokenProvider;
-    private final UserRepository userRepository;
+    private final TokenAuthenticator tokenAuthenticator;
 
     @Override
     protected void doFilterInternal(
@@ -28,47 +38,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-
-        // 1. Get the Authorization header
         String authHeader = request.getHeader("Authorization");
 
-        // 2. Check if it starts with "Bearer "
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            // No token? Let the request continue — SecurityConfig will decide if that's OK
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // 3. Extract the token (remove "Bearer " prefix)
-        String token = authHeader.substring(7);
-
-        // 4. Validate the token
-        if (jwtTokenProvider.validateToken(token)) {
-
-            // 5. Extract username from token
-            String username = jwtTokenProvider.getUsernameFromToken(token);
-
-            // 6. Check the user exists in database
-            userRepository.findByUsername(username).ifPresent(user -> {
-
-                // 7. Create authentication object and set it in Spring Security context
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                user,               // The authenticated user
-                                null,               // No credentials needed (already verified)
-                                Collections.emptyList()  // No roles for now
-                        );
-
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-
-                // 8. Tell Spring: "This user is authenticated!"
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            tokenAuthenticator.authenticate(authHeader.substring(7)).ifPresent(user -> {
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(user, null, Collections.emptyList());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             });
         }
 
-        // 9. Continue to the next filter / controller
         filterChain.doFilter(request, response);
     }
 }
