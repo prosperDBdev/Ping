@@ -230,7 +230,32 @@ public class MediaStorageService {
         return storeSanitizedImage(file, uploaderId, "statuses/");
     }
 
-    private StoredMedia storeSanitizedImage(MultipartFile file, String uploaderId, String keyPrefix) {
+    /**
+     * Same pipeline again, for a profile photo.
+     *
+     * Its own prefix for the same reason statuses have one — so the three kinds
+     * of image are distinguishable in the bucket — and, specifically for
+     * avatars, so that a sweep of expired status objects can never match one.
+     */
+    public StoredMedia uploadAvatar(MultipartFile file, String uploaderId) {
+        return storeSanitizedImage(file, uploaderId, "avatars/");
+    }
+
+    /**
+     * Every check an uploaded image has to pass, with nothing stored.
+     *
+     * Split out of storeSanitizedImage so that an image we DON'T keep — a
+     * feedback screenshot, which is forwarded to an email provider and then
+     * forgotten — still passes through exactly the same gate. The alternative
+     * was a second, shorter validation path for the not-stored case, which is
+     * the thing this class's other comments keep warning against: two places to
+     * get the sanitizing right means one place to eventually get it wrong.
+     *
+     * @return OUR bytes and the type we produced — never the client's
+     * @throws InvalidMediaException if it's empty, too large, not really an
+     *                               image, or not a type we accept
+     */
+    public SanitizedImage validateImage(MultipartFile file) {
         if (file.isEmpty() || file.getSize() > MAX_IMAGE_BYTES) {
             throw new InvalidMediaException("Image is empty or exceeds the 10MB limit");
         }
@@ -242,13 +267,19 @@ public class MediaStorageService {
             throw new UncheckedIOException("Failed to read uploaded image", e);
         }
 
+        // The real type, sniffed from the bytes. file.getContentType() is a
+        // header the client wrote and renaming a file changes nothing here.
         String realType = new Tika().detect(originalBytes);
         if (!ALLOWED_IMAGE_TYPES.contains(realType)) {
             throw new InvalidMediaException("Unsupported image type: " + realType);
         }
 
         // Everything after this point deals in OUR bytes, not the uploader's.
-        SanitizedImage sanitized = sanitizeImage(originalBytes, realType);
+        return sanitizeImage(originalBytes, realType);
+    }
+
+    private StoredMedia storeSanitizedImage(MultipartFile file, String uploaderId, String keyPrefix) {
+        SanitizedImage sanitized = validateImage(file);
 
         String objectKey = keyPrefix + uploaderId + "/" + UUID.randomUUID();
 

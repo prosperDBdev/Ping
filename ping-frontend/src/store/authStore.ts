@@ -28,7 +28,7 @@ interface AuthState {
   logout: () => void;
   clearError: () => void;
   fetchCurrentUser: () => Promise<void>;
-  updateProfile: (fields: { username?: string; note?: string }) => void;
+  updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null }) => void;
 }
 
 const useAuthStore = create<AuthState>()(
@@ -108,7 +108,7 @@ const useAuthStore = create<AuthState>()(
 
       clearError: () => set({ error: null }),
 
-      updateProfile: (fields: { username?: string; note?: string }) => {
+      updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null }) => {
         set((state) => ({
           user: state.user ? { ...state.user, ...fields } : state.user,
         }));

@@ -31,7 +31,23 @@ public class User {
 
     private String password;     // ← Stored as BCrypt hash, NEVER plain text
 
-    private String avatarUrl;    // ← Profile picture URL (nullable for now)
+    /**
+     * Where a client fetches this user's profile photo from, or null if they
+     * have none. Points at our own endpoint ("/api/users/{id}/avatar?v=..."),
+     * not at R2 — the bucket is private. See AvatarService.
+     */
+    private String avatarUrl;
+
+    /**
+     * The R2 object key behind avatarUrl. Server-side only: it is absent from
+     * UserResponse and never reaches the browser.
+     *
+     * It exists so that replacing a photo can delete the object the old one
+     * used. Without it the URL would be all we had, the previous object would
+     * be unreachable but still billed, and every profile-photo change would
+     * leak a file into the bucket forever.
+     */
+    private String avatarKey;
 
     @Builder.Default
     private String status = "OFFLINE";  // ← ONLINE or OFFLINE

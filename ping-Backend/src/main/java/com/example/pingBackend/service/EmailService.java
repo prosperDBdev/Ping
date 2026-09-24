@@ -1,5 +1,7 @@
 package com.example.pingBackend.service;
 
+import com.example.pingBackend.config.BrevoProperties;
+import com.example.pingBackend.exception.ServiceUnavailableException;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -59,25 +62,19 @@ public class EmailService {
             },
             (runnable, executor) -> log.error("Email queue full — an email was dropped"));
 
-    private final String apiKey;
-    private final String senderEmail;
-    private final String senderName;
+    // One object rather than three strings: the three brevo.* values are only
+    // ever meaningful together, and binding them once means this constructor
+    // doesn't have to restate their property names and defaults.
+    private final BrevoProperties brevo;
     private final String frontendUrl;
 
-    public EmailService(
-            @Value("${brevo.api-key:}") String apiKey,
-            @Value("${brevo.sender-email:}") String senderEmail,
-            @Value("${brevo.sender-name:Ping}") String senderName,
-            @Value("${app.frontend-url}") String frontendUrl
-    ) {
-        this.apiKey = apiKey;
-        this.senderEmail = senderEmail;
-        this.senderName = senderName;
+    public EmailService(BrevoProperties brevo, @Value("${app.frontend-url}") String frontendUrl) {
+        this.brevo = brevo;
         this.frontendUrl = frontendUrl;
     }
 
     public boolean isConfigured() {
-        return !apiKey.isBlank() && !senderEmail.isBlank();
+        return brevo.isConfigured();
     }
 
     /** Queues a password reset email and returns immediately. */
@@ -98,17 +95,11 @@ public class EmailService {
         }
 
         try {
-            restClient.post()
-                    .uri("/smtp/email")
-                    .header("api-key", apiKey)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "sender", Map.of("name", senderName, "email", senderEmail),
-                            "to", List.of(Map.of("email", toEmail)),
-                            "subject", "Reset your Ping password",
-                            "htmlContent", resetEmailHtml(resetLink)))
-                    .retrieve()
-                    .toBodilessEntity();
+            postToBrevo(Map.of(
+                    "sender", Map.of("name", brevo.senderName(), "email", brevo.senderEmail()),
+                    "to", List.of(Map.of("email", toEmail)),
+                    "subject", "Reset your Ping password",
+                    "htmlContent", resetEmailHtml(resetLink)));
             log.info("Password reset email handed to Brevo");
         } catch (RestClientException e) {
             // Logged without the link or the token — only that it failed and why.
@@ -135,6 +126,79 @@ public class EmailService {
                   <p style="color:#738086;font-size:13px">If you didn't ask for this, you can ignore this email — your password won't change.</p>
                 </div>
                 """.formatted(resetLink);
+    }
+
+    /** One file to travel with an email, already base64-encoded as Brevo wants it. */
+    public record Attachment(String fileName, String base64Content) {}
+
+    /**
+     * Send an email on the CALLING thread and fail loudly if Brevo won't take it.
+     *
+     * WHY THIS EXISTS ALONGSIDE sendPasswordReset, which queues instead.
+     *
+     * The queueing there is a security measure, not a performance one: it stops
+     * the response time of "forgot password" from revealing whether an address
+     * has an account, because a request that sends an email and one that doesn't
+     * then take the same time. Answering before the send finishes is the whole
+     * point, and it means the caller can never learn whether it worked.
+     *
+     * Neither half of that applies to feedback. The sender is signed in and is
+     * writing about themselves, so there is nothing to leak by timing — and the
+     * caller genuinely needs to know the outcome, because the person is waiting
+     * to be told their feedback arrived. Telling them it did when it silently
+     * failed would be worse than a slower response.
+     *
+     * @throws ServiceUnavailableException if email isn't configured, or Brevo
+     *                                     refused the message
+     */
+    public void sendNow(String toEmail, String subject, String htmlContent, List<Attachment> attachments) {
+        if (!isConfigured()) {
+            log.error("Email is not configured: set BREVO_API_KEY and BREVO_SENDER_EMAIL. Nothing was sent.");
+            throw new ServiceUnavailableException("We can't send that right now. Please try again later.");
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("sender", Map.of("name", brevo.senderName(), "email", brevo.senderEmail()));
+        body.put("to", List.of(Map.of("email", toEmail)));
+        body.put("subject", subject);
+        body.put("htmlContent", htmlContent);
+        if (attachments != null && !attachments.isEmpty()) {
+            body.put("attachment", attachments.stream()
+                    .map(a -> Map.of("name", a.fileName(), "content", a.base64Content()))
+                    .toList());
+        }
+
+        try {
+            postToBrevo(body);
+        } catch (RestClientException e) {
+            // The detail stays HERE. Brevo's refusals quote our account state,
+            // plan limits and the recipient address, and a RestClientException
+            // message can carry the whole response body — none of which belongs
+            // in an API response. The caller gets a sentence written for a
+            // person; this line is how the developer finds out what happened.
+            log.error("Brevo rejected an email: {}", e.getMessage());
+            throw new ServiceUnavailableException(
+                    "We couldn't send that right now. Please try again in a moment.");
+        }
+    }
+
+    /**
+     * The one place in this application that talks to Brevo.
+     *
+     * Protected rather than private so a test can subclass this service and
+     * override it, simulating acceptance and refusal without a network call or
+     * a real API key. That keeps the API key out of the test suite entirely:
+     * there is no configuration a test needs in order to exercise what happens
+     * when sending fails.
+     */
+    protected void postToBrevo(Map<String, ?> body) {
+        restClient.post()
+                .uri("/smtp/email")
+                .header("api-key", brevo.apiKey())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toBodilessEntity();
     }
 
     @PreDestroy

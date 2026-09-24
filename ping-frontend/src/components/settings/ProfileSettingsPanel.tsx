@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AxiosError } from "axios";
 import BlockedUsersSection from "@/components/settings/BlockedUsersSection";
 import StatusPrivacySection from "@/components/settings/StatusPrivacySection";
+import FeedbackSheet from "@/components/settings/FeedbackSheet";
+import Avatar from "@/components/common/Avatar";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
+import {
+  ACCEPTED_AVATAR_TYPES,
+  MAX_AVATAR_BYTES,
+  removeAvatar,
+  uploadAvatar,
+} from "@/lib/profile";
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
 
@@ -60,9 +70,12 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
   const [draftNote, setDraftNote] = useState(user?.note || "Here for the good stuff");
   const [notificationsOn, setNotificationsOn] = useState(true);
 
-  const initials = user?.username
-    ? user.username.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handle = user?.username ? user.username.toLowerCase().replace(/\s+/g, "") : "you";
   const note = user?.note || "Here for the good stuff";
@@ -76,6 +89,67 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
   const saveEdit = () => {
     updateProfile({ username: draftName.trim() || user?.username, note: draftNote.trim() });
     setIsEditing(false);
+  };
+
+  /**
+   * Both checks below also run on the server, which is the copy that matters.
+   * These exist so someone picking a 40MB file is told immediately instead of
+   * after a long upload that ends in a rejection.
+   */
+  const pickAvatar = async (file: File | undefined) => {
+    setAvatarError(null);
+    if (!file) return;
+
+    if (!ACCEPTED_AVATAR_TYPES.includes(file.type)) {
+      setAvatarError("Profile photos need to be a JPEG, PNG or WebP image.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setAvatarError("That image is larger than 10MB.");
+      return;
+    }
+
+    // Show the chosen photo straight away rather than an empty circle while
+    // the upload runs — the bytes are already here.
+    const preview = URL.createObjectURL(file);
+    setAvatarPreview(preview);
+    setAvatarBusy(true);
+
+    try {
+      const avatarUrl = await uploadAvatar(file);
+      updateProfile({ avatarUrl });
+    } catch (err) {
+      const axiosError = err as AxiosError<{ message?: string }>;
+      setAvatarError(
+        axiosError.response?.data?.message ||
+          "We couldn't update your photo. Please try again."
+      );
+    } finally {
+      // The preview has done its job either way: on success the stored URL
+      // takes over, on failure we fall back to whatever was there before.
+      URL.revokeObjectURL(preview);
+      setAvatarPreview(null);
+      setAvatarBusy(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+
+  const doRemoveAvatar = async () => {
+    setAvatarBusy(true);
+    setAvatarError(null);
+    try {
+      await removeAvatar();
+      updateProfile({ avatarUrl: null });
+    } catch (err) {
+      const axiosError = err as AxiosError<{ message?: string }>;
+      setAvatarError(
+        axiosError.response?.data?.message ||
+          "We couldn't remove your photo. Please try again."
+      );
+    } finally {
+      setAvatarBusy(false);
+      setConfirmRemovePhoto(false);
+    }
   };
 
   const handleLogout = () => {
@@ -108,11 +182,56 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
         <div>
           <div className="bg-ping-cream-dark dark:bg-ping-night-card rounded-3xl p-6 border border-ping-sand/60 dark:border-ping-night-border text-center">
             <div className="relative inline-block mb-4">
-              <div className="w-20 h-20 rounded-full bg-ping-dark dark:bg-ping-night-card-active text-white flex items-center justify-center text-2xl font-bold mx-auto">
-                {initials}
-              </div>
-              <div className="absolute bottom-1 right-1 w-4 h-4 bg-ping-green rounded-full border-2 border-ping-cream-dark dark:border-ping-night-card" />
+              <Avatar
+                username={user?.username}
+                avatarUrl={avatarPreview ?? user?.avatarUrl}
+                className="w-20 h-20"
+                textClassName="text-2xl"
+              />
+
+              {avatarBusy && (
+                <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                  <span className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
+
+              <div className="absolute top-0 right-0 w-4 h-4 bg-ping-green rounded-full border-2 border-ping-cream-dark dark:border-ping-night-card" />
+
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarBusy}
+                aria-label="Change profile photo"
+                className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-ping-teal dark:bg-ping-teal-light text-white flex items-center justify-center shadow-md border-2 border-ping-cream-dark dark:border-ping-night-card hover:opacity-90 transition disabled:opacity-60"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+              </button>
+
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept={ACCEPTED_AVATAR_TYPES.join(",")}
+                onChange={(e) => pickAvatar(e.target.files?.[0])}
+                className="hidden"
+              />
             </div>
+
+            {avatarError && (
+              <p role="alert" className="text-xs text-red-500 font-medium mb-3">
+                {avatarError}
+              </p>
+            )}
+
+            {user?.avatarUrl && !avatarBusy && (
+              <button
+                onClick={() => setConfirmRemovePhoto(true)}
+                className="text-xs font-semibold text-ping-text-light dark:text-ping-night-text-light hover:text-red-500 transition mb-2"
+              >
+                Remove photo
+              </button>
+            )}
             <h2 className="font-bold text-ping-dark dark:text-ping-night-text text-lg">
               {user?.username}
             </h2>
@@ -215,6 +334,25 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
             </div>
           </div>
 
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light mb-3">
+              Support
+            </p>
+            <div className="bg-white dark:bg-ping-night-card rounded-2xl border border-ping-sand/60 dark:border-ping-night-border divide-y divide-ping-sand/60 dark:divide-ping-night-border overflow-hidden">
+              <SettingsRow
+                onClick={() => setFeedbackOpen(true)}
+                label="Send feedback"
+                description="Report a bug or suggest an idea"
+                right={chevron}
+                icon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                  </svg>
+                }
+              />
+            </div>
+          </div>
+
           <BlockedUsersSection />
 
           <div className="pt-2">
@@ -279,6 +417,20 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
             </div>
           </div>
         </div>
+      )}
+
+      <FeedbackSheet open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+
+      {confirmRemovePhoto && (
+        <ConfirmDialog
+          title="Remove your photo?"
+          body="Your profile will go back to showing your initials. You can add a new photo whenever you like."
+          confirmLabel="Remove"
+          destructive
+          isWorking={avatarBusy}
+          onConfirm={doRemoveAvatar}
+          onCancel={() => setConfirmRemovePhoto(false)}
+        />
       )}
     </div>
   );

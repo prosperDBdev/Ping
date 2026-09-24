@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -115,7 +116,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors()
-                .forEach(error -> fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
+                .forEach(error -> fieldErrors.putIfAbsent(error.getField(), messageFor(error)));
 
         String message = fieldErrors.values().stream().findFirst()
                 .orElse("Some of the details you sent aren't valid.");
@@ -155,6 +156,36 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * The text to show for one failed field. There are two kinds, and only one
+     * of them is safe to pass on.
+     *
+     * A VALIDATION failure (@NotBlank, @Size, @NotNull) carries the message
+     * written on the DTO's own annotation — "Password must be at least 6
+     * characters". That was written for a person and is meant to be shown.
+     *
+     * A BINDING failure is different: the value couldn't be converted into the
+     * field's type at all, and Spring's default message for that quotes the Java
+     * type it was trying to build. Sending "type=BANANA" to the feedback
+     * endpoint produced, verbatim:
+     *
+     *   Failed to convert property value of type 'java.lang.String' to required
+     *   type 'com.example.pingBackend.dto.request.FeedbackRequest$FeedbackType'
+     *
+     * which hands anyone who sends a bad value our package layout, a DTO's name
+     * and the fact that the field is a nested enum. That is precisely the
+     * information disclosure the rest of this class exists to prevent, so those
+     * get a generic sentence instead. The field name is still named, because
+     * the caller does need to know WHICH input to fix — they just don't need to
+     * know what we called the class behind it.
+     */
+    private static String messageFor(FieldError error) {
+        if (error.isBindingFailure() || error.getDefaultMessage() == null) {
+            return "That isn't a valid value for " + error.getField() + ".";
+        }
+        return error.getDefaultMessage();
+    }
 
     private static ResponseEntity<ApiErrorResponse> respond(
             HttpStatus status, String message, String path, Map<String, String> fieldErrors, String errorId) {
