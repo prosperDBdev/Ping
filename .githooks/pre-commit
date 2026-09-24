@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# Refuses a commit that would publish a secret.
+#
+# This repository is public. A credential pushed here is compromised the moment
+# it lands. Bots scrape new GitHub commits for keys within minutes, and deleting
+# the commit afterwards doesn't help, because the key has already been copied.
+# The only real fix is rotating it. So the check runs BEFORE the commit exists.
+#
+# Enabled per clone with:   git config core.hooksPath .githooks
+#
+# It is a safety net, not a guarantee. .gitignore is the first line of defence;
+# this catches what slips past it (a `git add -f`, a secret pasted into a file
+# that IS tracked, a filled-in .env.example). If it blocks something that truly
+# isn't a secret, change the content. Don't reach for --no-verify.
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+fail=0
+
+# 1. Env files, whatever they're called. .env.example is the one allowed name,
+#    and it must stay empty (checked in 2).
+for f in $staged; do
+  case "$f" in
+    *.env.example) ;;
+    .env|*/.env|.env.*|*/.env.*)
+      echo "pre-commit: BLOCKED $f: env files hold real secrets and never go in git."
+      fail=1 ;;
+  esac
+done
+
+# 2. Credential-shaped text in the lines being ADDED (not the whole file, so
+#    old history doesn't re-trigger on every commit).
+added=$(git diff --cached -U0 --diff-filter=ACMR | grep -E '^\+' | grep -vE '^\+\+\+ ')
+
+check() {
+  if printf '%s\n' "$added" | grep -qE -e "$1"; then
+    echo "pre-commit: BLOCKED: $2"
+    printf '%s\n' "$added" | grep -nE -e "$1" | head -3 | cut -c1-160
+    fail=1
+  fi
+}
+
+check 'xkeysib-[a-f0-9]{32,}'                        "looks like a real Brevo API key"
+check 'AKIA[0-9A-Z]{16}'                             "looks like an AWS-style access key"
+check '-----BEGIN [A-Z ]*PRIVATE KEY-----'           "a private key"
+check 'mongodb(\+srv)?://[^:@/ ]+:[^@/ ${}]+@'       "a database URL with a real password in it"
+check '^\+[[:space:]]*[A-Z0-9_]*(SECRET|PASSWORD|API_KEY|ACCESS_KEY)[A-Z0-9_]*[[:space:]]*=[[:space:]]*[^[:space:]$#]{8,}' \
+      "a filled-in secret variable (is .env.example being given real values?)"
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "Commit refused. Remove the secret from the staged changes and try again."
+  echo "If a real key was ever committed anywhere, rotate it; don't just delete it."
+  exit 1
+fi
+exit 0
