@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Conversation, TypingEvent } from "@/types";
@@ -57,10 +58,6 @@ export default function ChatHeader({
   );
 
   const displayName = isGroup ? conversation.name : otherUser?.username || "Unknown";
-
-  const initials = displayName
-    ? displayName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "?";
 
   const isOnline = otherUser?.status === "ONLINE";
 
@@ -162,9 +159,13 @@ export default function ChatHeader({
               </svg>
             </div>
           ) : (
-            <div className={`w-10 h-10 ${avatarColors[colorIndex]} rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs`}>
-              {initials}
-            </div>
+            <Avatar
+              username={displayName}
+              avatarUrl={otherUser?.avatarUrl}
+              className="w-10 h-10 shadow-xs"
+              textClassName="text-xs"
+              fallbackClassName={avatarColors[colorIndex]}
+            />
           )}
           {!isGroup && isOnline && (
             <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-ping-green rounded-full border-2 border-white dark:border-ping-night-surface" />

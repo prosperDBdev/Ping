@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
@@ -106,10 +107,6 @@ export default function DashboardPage() {
     router.push("/chat");
   };
 
-  const userInitials = user?.username
-    ? user.username.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
-
   return (
     <div className="h-screen bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
       <NavSidebar
@@ -156,9 +153,13 @@ export default function DashboardPage() {
               className="relative"
               aria-label="Profile & settings"
             >
-              <div className="w-9 h-9 bg-slate-400 dark:bg-slate-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                {userInitials}
-              </div>
+              <Avatar
+                username={user?.username}
+                avatarUrl={user?.avatarUrl}
+                className="w-9 h-9 shadow-xs"
+                textClassName="text-xs"
+                fallbackClassName="bg-slate-400 dark:bg-slate-600"
+              />
               <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border border-white dark:border-ping-night-bg" />
             </button>
           </div>

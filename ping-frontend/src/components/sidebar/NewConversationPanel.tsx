@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import { useMemo, useState } from "react";
 import api from "@/lib/api";
 import useChatStore from "@/store/chatStore";
@@ -23,15 +24,6 @@ const avatarColors = [
   "bg-yellow-500",
   "bg-blue-400",
 ];
-
-function initialsFor(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 function colorFor(name: string) {
   return avatarColors[(name?.charCodeAt(0) || 0) % avatarColors.length];
@@ -293,11 +285,13 @@ export default function NewConversationPanel({
                       }`}
                     >
                       <div className="relative flex-shrink-0">
-                        <div
-                          className={`w-10 h-10 ${colorFor(u.username)} rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs`}
-                        >
-                          {initialsFor(u.username)}
-                        </div>
+                        <Avatar
+                          username={u.username}
+                          avatarUrl={u.avatarUrl}
+                          className="w-10 h-10 shadow-xs"
+                          textClassName="text-xs"
+                          fallbackClassName={colorFor(u.username)}
+                        />
                         {u.status === "ONLINE" && (
                           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-ping-green rounded-full border-2 border-white dark:border-ping-night-surface" />
                         )}

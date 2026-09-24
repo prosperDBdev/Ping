@@ -66,6 +66,7 @@ export default function MessageInput({
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleRecordingComplete = useCallback(
     async (result: VoiceRecordingResult) => {
@@ -138,8 +139,13 @@ export default function MessageInput({
     if (recorder.error) toast.error(recorder.error);
   }, [recorder.error]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
+
+    // Grow with the text, up to about five lines, then scroll inside.
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
     onTyping(true);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -166,15 +172,42 @@ export default function MessageInput({
     }
 
     setMessage("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     onTyping(false);
     onCancelReply?.();
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   }, [message, onSend, onTyping, replyingTo, onCancelReply]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  /**
+   * What Enter does depends on the keyboard, the same split WhatsApp makes.
+   *
+   * Computer: Enter sends, Shift+Enter starts a new line.
+   * Phone or tablet: Enter starts a new line, and the send button sends.
+   * A touch keyboard has no Shift key, so Enter-to-send would leave no way
+   * to write a second line at all.
+   *
+   * isComposing: some keyboards (Chinese, Japanese, many Android keyboards)
+   * use Enter to confirm a word mid-typing. That Enter must never send.
+   */
+  /**
+   * A picture pasted from the clipboard (a screenshot, or "Copy image" in a
+   * browser) goes through handleImageSelected, the same checks and preview as
+   * picking a file. Ordinary text pastes are left completely alone.
+   */
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const image = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+    if (!image) return;
+    e.preventDefault();
+    handleImageSelected(image);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      const touchKeyboard = window.matchMedia("(pointer: coarse)").matches;
+      if (!touchKeyboard) {
+        e.preventDefault();
+        handleSend();
+      }
     }
     if (e.key === "Escape" && replyingTo) {
       onCancelReply?.();
@@ -303,14 +336,16 @@ export default function MessageInput({
           </div>
 
           {/* Input */}
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={message}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             disabled={isUploadingVoice}
             placeholder={replyingTo ? "Write your reply..." : "Write something worth sending..."}
-            className="flex-1 bg-transparent text-sm text-ping-dark dark:text-ping-night-text placeholder-ping-text-light/60 dark:placeholder-ping-night-text-light/60 focus:outline-none disabled:opacity-50"
+            className="flex-1 self-center resize-none max-h-32 overflow-y-auto leading-relaxed py-1.5 bg-transparent text-sm text-ping-dark dark:text-ping-night-text placeholder-ping-text-light/60 dark:placeholder-ping-night-text-light/60 focus:outline-none disabled:opacity-50"
           />
 
           {message.trim() ? (

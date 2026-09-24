@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import useAuthStore from "@/store/authStore";
@@ -28,9 +29,6 @@ export default function NavSidebar({
   onOpenSettings,
 }: NavSidebarProps) {
   const { user, logout } = useAuthStore();
-  const initials = user?.username
-    ? user.username.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
 
   return (
     <div className="w-52 bg-ping-cream dark:bg-ping-night-bg border-r border-ping-sand/60 dark:border-ping-night-border flex-col flex-shrink-0 hidden lg:flex">
@@ -141,9 +139,12 @@ export default function NavSidebar({
           }`}
         >
           <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-ping-dark dark:bg-ping-night-card-active text-white flex items-center justify-center text-[11px] font-bold">
-              {initials}
-            </div>
+            <Avatar
+              username={user?.username}
+              avatarUrl={user?.avatarUrl}
+              className="w-8 h-8"
+              textClassName="text-[11px]"
+            />
             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border-2 border-ping-cream dark:border-ping-night-bg" />
           </div>
           <div className="flex-1 min-w-0 text-left">

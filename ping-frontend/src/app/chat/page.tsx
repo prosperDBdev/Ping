@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
@@ -422,10 +423,6 @@ export default function ChatPage() {
 
   const totalUnreadCount = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
 
-  const userInitials = user?.username
-    ? user.username.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
-
   const filteredConversations = conversations.filter((conv) => {
     if (!searchQuery.trim()) return true;
     const other = conv.participants.find((p) => p.id !== user?.id);
@@ -511,9 +508,13 @@ export default function ChatPage() {
                       onClick={() => router.push("/settings")}
                       className="relative"
                     >
-                      <div className="w-8 h-8 bg-slate-400 dark:bg-slate-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                        {userInitials}
-                      </div>
+                      <Avatar
+                        username={user?.username}
+                        avatarUrl={user?.avatarUrl}
+                        className="w-8 h-8 shadow-xs"
+                        textClassName="text-xs"
+                        fallbackClassName="bg-slate-400 dark:bg-slate-600"
+                      />
                       <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border border-white dark:border-ping-night-bg" />
                     </button>
                   </div>
@@ -563,9 +564,13 @@ export default function ChatPage() {
                       className="flex items-center gap-1.5"
                     >
                       <div className="relative">
-                        <div className="w-8 h-8 bg-slate-400 dark:bg-slate-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                          {userInitials}
-                        </div>
+                        <Avatar
+                          username={user?.username}
+                          avatarUrl={user?.avatarUrl}
+                          className="w-8 h-8 shadow-xs"
+                          textClassName="text-xs"
+                          fallbackClassName="bg-slate-400 dark:bg-slate-600"
+                        />
                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border border-white dark:border-ping-night-bg" />
                       </div>
                       <svg className="w-3.5 h-3.5 text-ping-text-light dark:text-ping-night-text-light" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">

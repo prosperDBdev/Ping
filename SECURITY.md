@@ -250,3 +250,10 @@ owner if you find a way one of them is worse than described.
     encoded `/`) get the servlet container's default HTML error page rather than
     the standard JSON error. It shows no version number or stack trace, but its
     styling identifies the server software.
+12. **Reply quotes can be forged.** A reply is stored as a JSON header on the
+    first line of the message text, and the server never checks it. Anyone can
+    send a message whose first line is a fake quote attributed to another user.
+    The fix is a server-verified reference to the original message.
+13. **Messages are not end-to-end encrypted.** They are encrypted in transit
+    (HTTPS/WSS) but stored readable on the server, so anyone with access to the
+    server or the database can read them.

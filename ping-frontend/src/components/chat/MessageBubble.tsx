@@ -208,11 +208,11 @@ export default function MessageBubble({
                     placeholder used when none was typed, so it's suppressed
                     here rather than shown as if the sender wrote it. */}
                 {body && body !== "📷 Photo" && (
-                  <p className="text-sm leading-relaxed break-words font-normal">{body}</p>
+                  <p className="text-sm leading-relaxed break-words whitespace-pre-wrap font-normal">{body}</p>
                 )}
               </div>
             ) : (
-              <p className="text-sm leading-relaxed break-words font-normal">{body}</p>
+              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap font-normal">{body}</p>
             )}
           </div>
 

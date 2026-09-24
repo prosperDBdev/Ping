@@ -1,5 +1,7 @@
 "use client";
 
+import { parseReplyQuote } from "@/lib/messageActions";
+import Avatar from "@/components/common/Avatar";
 import { Conversation } from "@/types";
 import useAuthStore from "@/store/authStore";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
@@ -25,16 +27,13 @@ export default function ConversationItem({
 
   const displayName = isGroup ? conversation.name : otherUser?.username || "Unknown";
 
-  const initials = displayName
-    ? displayName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "?";
-
   const isOnline = otherUser?.status === "ONLINE";
+
+  // A reply is stored as a JSON quote header on its first line, then the
+  // message itself. The preview shows only the message, never the header.
+  const lastMessageText = conversation.lastMessage
+    ? parseReplyQuote(conversation.lastMessage.content).body
+    : "";
 
   const avatarColors = [
     "bg-ping-orange",
@@ -83,11 +82,13 @@ export default function ConversationItem({
             </svg>
           </div>
         ) : (
-          <div
-            className={`w-10 h-10 ${avatarColors[colorIndex]} rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs`}
-          >
-            {initials}
-          </div>
+          <Avatar
+            username={displayName}
+            avatarUrl={otherUser?.avatarUrl}
+            className="w-10 h-10 shadow-xs"
+            textClassName="text-xs"
+            fallbackClassName={avatarColors[colorIndex]}
+          />
         )}
         {!isGroup && isOnline && (
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-ping-green rounded-full border-2 border-white dark:border-ping-night-surface" />
@@ -113,8 +114,8 @@ export default function ConversationItem({
           <p className="text-xs text-ping-text-light dark:text-ping-night-text-light truncate max-w-[170px]">
             {conversation.lastMessage
               ? isGroup
-                ? `${conversation.lastMessage.senderId === currentUser?.id ? "You" : conversation.lastMessage.senderUsername}: ${conversation.lastMessage.content}`
-                : conversation.lastMessage.content
+                ? `${conversation.lastMessage.senderId === currentUser?.id ? "You" : conversation.lastMessage.senderUsername}: ${lastMessageText}`
+                : lastMessageText
               : "No messages yet"}
           </p>
           {conversation.unreadCount > 0 && (

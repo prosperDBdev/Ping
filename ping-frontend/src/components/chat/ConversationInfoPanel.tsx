@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "@/components/common/Avatar";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Conversation, User, WorkspaceSection } from "@/types";
@@ -8,7 +9,7 @@ import { removeGroupMember } from "@/lib/moderation";
 import useAuthStore from "@/store/authStore";
 import useWorkspaceStore from "@/store/workspaceStore";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
-import { colorFor, initialsFor } from "@/lib/avatar";
+import { colorFor } from "@/lib/avatar";
 
 interface ConversationInfoPanelProps {
   conversation: Conversation;
@@ -86,7 +87,13 @@ export default function ConversationInfoPanel({
   ];
 
   return (
-    <div className="hidden md:flex w-[300px] flex-shrink-0 h-full border-l border-ping-sand/60 dark:border-ping-night-border bg-ping-cream dark:bg-ping-night-surface flex-col overflow-y-auto scrollbar-thin">
+    // Phones: a full-screen panel over the chat. It used to be "hidden md:flex",
+    // which meant it simply didn't exist below 768px wide: tapping a group's
+    // name on a phone "opened" it invisibly, so group members on phones could
+    // never see who else was in the group. From md up it's the side panel again.
+    // data-no-swipe: while it covers the screen, a sideways flick is scrolling
+    // the member list, not a request to change tabs.
+    <div data-no-swipe className="fixed inset-0 z-50 flex w-full md:static md:z-auto md:w-[300px] flex-shrink-0 h-full border-l border-ping-sand/60 dark:border-ping-night-border bg-ping-cream dark:bg-ping-night-surface flex-col overflow-y-auto scrollbar-thin">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-ping-text-light dark:text-ping-night-text-light">
@@ -111,9 +118,13 @@ export default function ConversationInfoPanel({
             </svg>
           </div>
         ) : (
-          <div className={`w-16 h-16 rounded-full ${colorFor(displayName)} text-white flex items-center justify-center mb-3 text-xl font-bold`}>
-            {initialsFor(displayName)}
-          </div>
+          <Avatar
+            username={displayName}
+            avatarUrl={otherUser?.avatarUrl}
+            className="w-16 h-16 mb-3"
+            textClassName="text-xl"
+            fallbackClassName={colorFor(displayName)}
+          />
         )}
         <h2 className="font-bold text-ping-dark dark:text-ping-night-text text-base">{displayName}</h2>
         <p className="text-xs text-ping-text-light dark:text-ping-night-text-light mt-1">{tagline}</p>
@@ -161,9 +172,13 @@ export default function ConversationInfoPanel({
           {conversation.participants.map((p) => (
             <div key={p.id} className="flex items-center gap-3">
               <div className="relative flex-shrink-0">
-                <div className={`w-8 h-8 ${colorFor(p.username)} rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
-                  {initialsFor(p.username)}
-                </div>
+                <Avatar
+                  username={p.username}
+                  avatarUrl={p.avatarUrl}
+                  className="w-8 h-8"
+                  textClassName="text-[10px]"
+                  fallbackClassName={colorFor(p.username)}
+                />
                 {p.status === "ONLINE" && (
                   <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border-2 border-ping-cream dark:border-ping-night-surface" />
                 )}
