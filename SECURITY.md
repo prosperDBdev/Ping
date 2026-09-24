@@ -130,6 +130,8 @@ Browser --HTTPS--> nginx (only public entry point; TLS ends here)
 | Password reset request | 10 per IP and 3 per email address, per hour |
 | Password reset confirmation | 10 per IP per 15 min |
 | Feedback | 5 per user per hour |
+| Invite link preview (public) | 30 per IP per 10 min |
+| New invite link | 10 per user per hour |
 
 Behind nginx the real client IP comes from `X-Forwarded-For`. It's trusted only
 when the connection comes from an internal proxy address, so a client can't
@@ -140,6 +142,21 @@ forge a new IP per request.
 - Reset links expire after 15 minutes.
 - The response is the same whether or not the email has an account, and the email
   is sent in the background so timing doesn't reveal it either.
+
+### Invite links
+
+- Each user has at most one live invite link (unique index), valid for 7 days.
+  Codes are 128 random bits from `SecureRandom`, encoded as 22 URL-safe
+  characters.
+- Making a new link overwrites the old code in a single atomic upsert, so the
+  previous link stops working immediately.
+- The public preview (`GET /api/auth/invites/{code}`) returns only the inviter's
+  username, and the same `404` whether a code is unknown, expired, replaced or
+  malformed. Malformed codes are rejected before any database query.
+- Expiry is enforced on every lookup; the TTL index only cleans up afterwards.
+- An invalid code never blocks registration: the account is created without
+  attribution. Who invited a user is recorded server-side and never returned in
+  any user profile.
 
 ### Authorisation
 
@@ -229,3 +246,7 @@ owner if you find a way one of them is worse than described.
    least-privilege account.
 9. No multi-factor authentication.
 10. `GET /api/memories` isn't implemented and returns a generic 500 with an error ID.
+11. **Requests refused by Spring Security's firewall** (for example, URLs with an
+    encoded `/`) get the servlet container's default HTML error page rather than
+    the standard JSON error. It shows no version number or stack trace, but its
+    styling identifies the server software.

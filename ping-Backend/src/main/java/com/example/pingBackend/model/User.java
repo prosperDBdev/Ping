@@ -49,6 +49,16 @@ public class User {
      */
     private String avatarKey;
 
+    /**
+     * Who invited this user, if they signed up through someone's invite link
+     * (Stage 12). The inviter's user id, or null.
+     *
+     * Set once, at registration, from a code the server has checked, never from
+     * anything the new user can simply claim. Not included in UserResponse:
+     * who invited whom is between the two of them.
+     */
+    private String invitedBy;
+
     @Builder.Default
     private String status = "OFFLINE";  // ← ONLINE or OFFLINE
 

@@ -41,4 +41,8 @@ public interface UserRepository extends MongoRepository<User, String> {
     // "ohn" would find "john", "johnny", etc.
     // Spring auto-generates: db.users.find({ username: { $regex: "ohn", $options: "i" } })
     List<User> findByUsernameContainingIgnoreCase(String username);
+
+    // How many accounts were created through this user's invite links.
+    // Spring auto-generates: db.users.countDocuments({ invitedBy: "..." })
+    long countByInvitedBy(String invitedBy);
 }

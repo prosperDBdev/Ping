@@ -30,6 +30,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RateLimiter rateLimiter;
+    private final AppInviteService appInviteService;
 
     // ------------------------------------------------------------------
     // Sign-in limits
@@ -86,11 +87,16 @@ public class AuthService {
             throw new ConflictException("An account with that email already exists");
         }
 
+        // Stage 12: who invited them, if anyone. resolveInviter never throws.
+        // An expired or mangled link means no attribution, not a failed sign-up.
+        String invitedBy = appInviteService.resolveInviter(request.getInviteCode()).orElse(null);
+
         // 2. Create new user with hashed password
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))  // ← Hash it!
+                .invitedBy(invitedBy)
                 .build();
 
         // 3. Save.

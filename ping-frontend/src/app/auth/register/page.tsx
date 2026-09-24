@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import useAuthStore from "@/store/authStore";
 import toast, { Toaster } from "react-hot-toast";
+import { INVITE_CODE_SHAPE, previewInvite } from "@/lib/invites";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,6 +19,30 @@ export default function RegisterPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
 
+  // Stage 12: arriving from /invite/<code> brings the code along as ?invite=.
+  // It's only kept if the server confirms it's live, so the banner and the
+  // attribution never disagree. An expired code just quietly isn't used.
+  const [invite, setInvite] = useState<{ code: string; inviter: string } | null>(null);
+
+  useEffect(() => {
+    // Read straight from the URL rather than useSearchParams, which would force
+    // this whole page behind a Suspense boundary for one optional value.
+    const code = new URLSearchParams(window.location.search).get("invite");
+    if (!code || !INVITE_CODE_SHAPE.test(code)) return;
+
+    let cancelled = false;
+    previewInvite(code)
+      .then((inviter) => {
+        if (!cancelled) setInvite({ code, inviter });
+      })
+      .catch(() => {
+        // Invalid or expired: sign up without attribution.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -26,7 +51,7 @@ export default function RegisterPage() {
     e.preventDefault();
 
     try {
-      await register(formData.username, formData.email, formData.password);
+      await register(formData.username, formData.email, formData.password, invite?.code);
       toast.success("Welcome to Ping! 🎉");
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -56,6 +81,15 @@ export default function RegisterPage() {
         <p className="text-ping-text-light mb-8">
           A few details and your first space is ready.
         </p>
+
+        {invite && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl bg-ping-teal/10 border border-ping-teal/30 px-4 py-3 text-sm text-ping-dark">
+            <span aria-hidden="true">✉️</span>
+            <span>
+              <strong className="font-semibold">@{invite.inviter}</strong> invited you to Ping
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Username */}

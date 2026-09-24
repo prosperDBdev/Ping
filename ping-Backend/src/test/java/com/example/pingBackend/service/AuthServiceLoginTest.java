@@ -58,7 +58,8 @@ class AuthServiceLoginTest {
         JwtTokenProvider jwt = new JwtTokenProvider(
                 "test-only-signing-key-not-used-anywhere-real-0123456789abcdef", 86_400_000);
 
-        auth = new AuthService(repo, encoder, jwt, new RateLimiter());
+        // Sign-in never touches invites, so the invite service isn't needed.
+        auth = new AuthService(repo, encoder, jwt, new RateLimiter(), null);
         auth.createDummyHash();
     }
 

@@ -5,6 +5,7 @@ import { AxiosError } from "axios";
 import BlockedUsersSection from "@/components/settings/BlockedUsersSection";
 import StatusPrivacySection from "@/components/settings/StatusPrivacySection";
 import FeedbackSheet from "@/components/settings/FeedbackSheet";
+import InviteFriendsSection from "@/components/settings/InviteFriendsSection";
 import Avatar from "@/components/common/Avatar";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import {
@@ -333,6 +334,8 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
               />
             </div>
           </div>
+
+          <InviteFriendsSection />
 
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light mb-3">

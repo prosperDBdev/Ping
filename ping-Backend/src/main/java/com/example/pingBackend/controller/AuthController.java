@@ -5,12 +5,16 @@ import com.example.pingBackend.dto.request.LoginRequest;
 import com.example.pingBackend.dto.request.RegisterRequest;
 import com.example.pingBackend.dto.request.ResetPasswordRequest;
 import com.example.pingBackend.dto.response.AuthResponse;
+import com.example.pingBackend.dto.response.InvitePreviewResponse;
+import com.example.pingBackend.service.AppInviteService;
 import com.example.pingBackend.service.AuthService;
 import com.example.pingBackend.service.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +29,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final AppInviteService appInviteService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -59,6 +64,19 @@ public class AuthController {
     ) {
         passwordResetService.resetPassword(request.getToken(), request.getNewPassword(), clientIp(http));
         return ResponseEntity.ok(Map.of("message", "Password changed. Sign in with your new password."));
+    }
+
+    /**
+     * Who made this invite link: the "Maya invited you to Ping" page (Stage 12).
+     *
+     * Lives under /api/auth because that's the part of the API that works
+     * without logging in, and the person opening an invite doesn't have an
+     * account yet. Being public is why it's rate limited per IP and returns a
+     * username only.
+     */
+    @GetMapping("/invites/{code}")
+    public InvitePreviewResponse invitePreview(@PathVariable String code, HttpServletRequest http) {
+        return new InvitePreviewResponse(appInviteService.inviterUsername(code, clientIp(http)));
     }
 
     /**

@@ -23,7 +23,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
 
-  register: (username: string, email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -40,13 +40,15 @@ const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
-      register: async (username: string, email: string, password: string) => {
+      register: async (username: string, email: string, password: string, inviteCode?: string) => {
         set({ isLoading: true, error: null });
         try {
           const res = await api.post("/auth/register", {
             username,
             email,
             password,
+            // Only sent when the person arrived through a checked invite link.
+            ...(inviteCode ? { inviteCode } : {}),
           });
 
           const { token, id, username: name, email: mail } = res.data;
