@@ -109,12 +109,24 @@ const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setActiveConversation: (conversation: Conversation) => {
-    set({
-      activeConversation: conversation,
-      messages: [],
-      currentPage: 0,
-      hasMoreMessages: true,
-    });
+    set((state) =>
+      // Selecting the chat that's ALREADY open keeps its messages.
+      //
+      // This used to empty the list on every call. But the chat page only
+      // reloads history when the conversation's id CHANGES, so tapping the
+      // open chat a second time wiped the messages and nothing brought them
+      // back: "No messages yet" for a chat full of messages. The two halves of
+      // "switch conversation" (clear the old list, load the new one) have to
+      // be triggered by the same condition, the id changing, or they drift.
+      state.activeConversation?.id === conversation.id
+        ? { activeConversation: conversation }
+        : {
+            activeConversation: conversation,
+            messages: [],
+            currentPage: 0,
+            hasMoreMessages: true,
+          }
+    );
   },
 
   fetchMessages: async (conversationId: string, page: number = 0) => {
