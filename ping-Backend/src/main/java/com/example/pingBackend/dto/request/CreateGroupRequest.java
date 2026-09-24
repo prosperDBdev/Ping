@@ -68,13 +68,22 @@ public class CreateGroupRequest {
      * At least one, so the smallest possible group is two people. A "group" of
      * one is just a note to self, and nothing here supports that.
      *
-     * At most 49, giving 50 members including the creator. That ceiling is a
+     * At most 199, giving 200 members including the creator. That ceiling is a
      * cost decision, not a product one: the Conversation document carries an
      * unreadCount entry and potentially a clearedAt entry PER MEMBER, and both
      * maps live inside the single document that every message write updates.
-     * Unbounded membership means an unbounded document on a 512MB free tier.
+     *
+     * It was 50 while the database was MongoDB Atlas's 512MB free tier. On a
+     * self-hosted server with 100GB of disk, 200 members keeps the document
+     * to a few tens of kilobytes, and fanning one message out to 200 WebSocket
+     * subscribers is well within one server's reach.
+     *
+     * Checking the count HERE, at the request's edge, matters for another
+     * reason: it runs before the service looks any of the ids up. Without it,
+     * one request listing a million ids would make the server run a
+     * million-id database query before anything turned it away.
      */
     @NotEmpty(message = "A group needs at least one other person")
-    @Size(max = 49, message = "A group can have at most 50 members including you")
+    @Size(max = 199, message = "A group can have at most 200 members including you")
     private List<String> participantIds;
 }
