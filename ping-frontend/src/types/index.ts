@@ -6,7 +6,11 @@ export interface EchoMessage {
 export interface User {
   id: string;
   username: string;
-  email: string;
+  /**
+   * Present only on your own profile (GET /users/me). The server leaves it out
+   * for every other user, so never rely on it for anyone else.
+   */
+  email?: string;
   avatarUrl: string | null;
   status: string;
   lastSeen: string | null;

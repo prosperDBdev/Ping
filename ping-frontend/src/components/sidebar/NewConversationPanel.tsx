@@ -307,8 +307,10 @@ export default function NewConversationPanel({
                         <p className="font-bold text-ping-dark dark:text-ping-night-text text-sm truncate">
                           {u.username}
                         </p>
+                        {/* The handle, not the email: other people's addresses are
+                            no longer sent to the browser at all. */}
                         <p className="text-xs text-ping-text-light dark:text-ping-night-text-light truncate">
-                          {u.email}
+                          @{u.username.toLowerCase().replace(/\s+/g, "")}
                         </p>
                       </div>
 

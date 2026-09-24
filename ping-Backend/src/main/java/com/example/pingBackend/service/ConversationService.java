@@ -335,10 +335,12 @@ public class ConversationService {
     public ConversationResponse mapToResponse(Conversation conversation, String currentUserId) {
         List<UserResponse> participantDetails = conversation.getParticipants().stream()
                 .map(participantId -> userRepository.findById(participantId)
+                        // No email: everyone in a conversation sees this list, so an
+                        // address here would be handed to every other member. Joining
+                        // a group is not consent to share your email with it.
                         .map(user -> UserResponse.builder()
                                 .id(user.getId())
                                 .username(user.getUsername())
-                                .email(user.getEmail())
                                 .avatarUrl(user.getAvatarUrl())
                                 .status(user.getStatus())
                                 .lastSeen(user.getLastSeen())

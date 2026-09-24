@@ -32,7 +32,11 @@ public class UserController {
     // GET /api/users/me — Get the currently logged-in user
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(mapToResponse(user));
+        // The one place a user's email is returned: their own profile. Everything
+        // else goes through mapToResponse, which leaves it out.
+        UserResponse self = mapToResponse(user);
+        self.setEmail(user.getEmail());
+        return ResponseEntity.ok(self);
     }
 
     // GET /api/users/search?q=john — Search for users by username
@@ -158,12 +162,18 @@ public class UserController {
                 .body(media.bytes());
     }
 
-    // Helper: Convert User model → UserResponse DTO (no password!)
+    /**
+     * How one user appears to OTHER users: no password, and no email.
+     *
+     * Every endpoint that describes someone else goes through here (search,
+     * another user's profile, the blocked list), so the rule "you can't read
+     * other people's email addresses" lives in exactly one place. getCurrentUser
+     * adds the email back for the caller's own profile only.
+     */
     private UserResponse mapToResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
-                .email(user.getEmail())
                 .avatarUrl(user.getAvatarUrl())
                 .status(user.getStatus())
                 .lastSeen(user.getLastSeen())

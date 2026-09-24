@@ -13,7 +13,7 @@ and the limitations that are already known.
 
 ## Reporting a vulnerability
 
-**Email:** `<security contact address, to be filled in by the owner>`
+**Email:** `security@ebitimi.dev`
 
 Please **do not** open a public issue for a security problem. Include:
 
@@ -152,6 +152,10 @@ forge a new IP per request.
   to the user's own topic and to conversations they belong to, and wildcard
   destinations are rejected. Someone removed from a group loses their live
   subscription immediately rather than on reconnect.
+- **Email addresses are private.** A user's email is returned only on their own
+  profile (`GET /api/users/me`) and at their own login or registration. Search
+  results, other users' profiles, the blocked list and conversation participant
+  lists omit it entirely.
 - Blocking works in both directions for messaging, and blocked users are
   excluded from search.
 - Statuses honour the author's contacts, their "hide from" list, and their reshare
@@ -205,26 +209,23 @@ forge a new IP per request.
 These are already known. Please don't report them as new findings, but do tell the
 owner if you find a way one of them is worse than described.
 
-1. **Any user can read any other user's email address.** `GET /api/users/search`
-   and `GET /api/users/{id}` include `email` in their responses, so a signed-in
-   user can collect addresses by searching. *This is the highest priority to fix.*
-2. **The JWT is stored in `localStorage`,** so any XSS would expose it. No
+1. **The JWT is stored in `localStorage`,** so any XSS would expose it. No
    Content-Security-Policy is set yet to limit the impact of one.
-3. **No security headers yet:** no CSP, `X-Frame-Options`/`frame-ancestors`,
+2. **No security headers yet:** no CSP, `X-Frame-Options`/`frame-ancestors`,
    `Referrer-Policy` or `Permissions-Policy`. Clickjacking is therefore possible.
-4. **There's no server-side logout.** A token stays valid until it expires (24
+3. **There's no server-side logout.** A token stays valid until it expires (24
    hours) unless the user changes their password. A single stolen token can't be
    revoked on its own.
-5. **Registration reveals whether a username or email is taken** (a 409 response),
+4. **Registration reveals whether a username or email is taken** (a 409 response),
    and **registration and search aren't rate limited,** so both allow account
    enumeration, and registration allows bulk sign-ups.
-6. **Rate limits and online presence are held in memory,** per server instance.
+5. **Rate limits and online presence are held in memory,** per server instance.
    They reset on restart, and IP-based limits scale with how many IPs an attacker
    controls.
-7. **Voice notes are type-checked but not re-encoded,** unlike images.
-8. **Profile photos can be read by any signed-in user.** This is intentional,
+6. **Voice notes are type-checked but not re-encoded,** unlike images.
+7. **Profile photos can be read by any signed-in user.** This is intentional,
    because avatars appear in search results and member lists.
-9. **The application connects to MongoDB as its root user** rather than a
+8. **The application connects to MongoDB as its root user** rather than a
    least-privilege account.
-10. No multi-factor authentication.
-11. `GET /api/memories` isn't implemented and returns a generic 500 with an error ID.
+9. No multi-factor authentication.
+10. `GET /api/memories` isn't implemented and returns a generic 500 with an error ID.
