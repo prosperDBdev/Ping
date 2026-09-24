@@ -1,0 +1,111 @@
+# Ping: the whole stack on one server.
+#
+# On the server, from the repository root:
+#     docker compose up -d --build
+#
+# NO SECRETS LIVE IN THIS FILE. Every ${...} is read from a file called .env
+# sitting next to this one. That file exists only on the server, is created by
+# hand from .env.example, and is ignored by git.
+#
+# ${NAME:?message} means the variable is REQUIRED: if it is missing, compose
+# refuses to start and prints the message, rather than booting a half-configured
+# app. It's the same fail-fast idea as JWT_SECRET having no default.
+
+name: ping
+
+services:
+
+  # ------------------------------------------------------------------ MongoDB
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+
+    # Mongo's cache would otherwise size itself from the whole machine's RAM
+    # and crowd out the JVM. 1GB is plenty for a chat app's text data.
+    command: ["--wiredTigerCacheSizeGB", "1"]
+
+    environment:
+      # Only applied the FIRST time, when the data volume is empty. Changing
+      # these later does not change the password of an existing database.
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?set MONGO_ROOT_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+
+    # A named volume, so the data outlives the container. `docker compose down`
+    # keeps it. `docker compose down -v` DELETES it, along with every account
+    # and message. Never add -v unless that is what you mean.
+    volumes:
+      - mongo-data:/data/db
+
+    # THERE IS DELIBERATELY NO `ports:` SECTION. The backend reaches Mongo by
+    # service name ("mongo") on compose's private network, so the database never
+    # needs to be exposed. Publishing it would also bypass ufw, because Docker
+    # writes its own firewall rules, and an internet-facing MongoDB gets found
+    # and ransomed within hours.
+
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    mem_limit: 2g
+
+  # -------------------------------------------------------------- Spring Boot
+  backend:
+    build: ./ping-Backend
+    restart: unless-stopped
+
+    # Wait until Mongo actually answers, not merely until its container exists.
+    # Without this the backend can start first, fail its startup database work
+    # (PresenceService resets everyone to offline on boot) and crash-loop.
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+    environment:
+      PORT: "8080"
+      # "mongo" is the service name above; compose's network resolves it.
+      # authSource=admin because the root user lives in the admin database.
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/ping?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env}
+      FRONTEND_URL: ${PUBLIC_ORIGIN}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?set R2_ACCOUNT_ID in .env}
+      R2_ACCESS_KEY: ${R2_ACCESS_KEY:?set R2_ACCESS_KEY in .env}
+      R2_SECRET_KEY: ${R2_SECRET_KEY:?set R2_SECRET_KEY in .env}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-ping-media}
+      # Optional: the app runs without email and reports it as unavailable.
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-Ping}
+      FEEDBACK_RECIPIENT_EMAIL: ${FEEDBACK_RECIPIENT_EMAIL:-}
+
+    # 127.0.0.1 is the important part. "8080:8080" alone would listen on every
+    # interface, and Docker's own firewall rules would make it reachable from
+    # the internet even with ufw blocking 8080. Bound to localhost, only nginx
+    # on this machine can reach it.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    mem_limit: 1536m
+
+  # ------------------------------------------------------------------ Next.js
+  frontend:
+    build:
+      context: ./ping-frontend
+      # Build ARGUMENTS, not environment: NEXT_PUBLIC_* values are compiled into
+      # the JavaScript bundle during the build (see the frontend Dockerfile).
+      # Changing the domain means rebuilding this image, not restarting it.
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env}/api
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_ORIGIN}/ws
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 512m
+
+volumes:
+  mongo-data:

@@ -1,0 +1,28 @@
+# Everything here is excluded from the build context. Two reasons: a smaller
+# context is a faster build, and anything not sent cannot accidentally end up
+# baked into an image that gets pushed somewhere.
+
+node_modules
+.next
+out
+
+.git
+.gitignore
+.git.backup-before-monorepo
+
+# Secrets never travel in a build context. Real values reach the server through
+# its own .env file, which is created there by hand.
+.env
+.env.local
+.env*.local
+
+*.zip
+tsconfig.tsbuildinfo
+npm-debug.log*
+.DS_Store
+
+README.md
+AGENTS.md
+CLAUDE.md
+Dockerfile
+.dockerignore

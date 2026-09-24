@@ -1,0 +1,13 @@
+# The Dockerfile copies only pom.xml and src/, so this is mostly about keeping
+# the build context small — but target/ holds locally-built jars that would
+# otherwise be uploaded on every build for no reason.
+
+target
+.git
+.gitignore
+.idea
+*.iml
+.env
+README.md
+Dockerfile
+.dockerignore
