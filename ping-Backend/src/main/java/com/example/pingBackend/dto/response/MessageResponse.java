@@ -1,5 +1,6 @@
 package com.example.pingBackend.dto.response;
 
+import java.util.Map;
 import com.example.pingBackend.model.Message;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,4 +27,8 @@ public class MessageResponse {
     private Message.Attachment attachment;
     private Message.StatusReply statusReply;
     private LocalDateTime createdAt;
+    /** userId -> emoji. Empty, never null. */
+    private Map<String, String> reactions;
+    /** Set once the message has been edited, so the app can say so. */
+    private LocalDateTime editedAt;
 }

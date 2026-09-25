@@ -166,10 +166,13 @@ export default function useWebSocket() {
         // Sidebar preview/unread is handled by the inbox subscription above,
         // which fires for every conversation — updating it here too would
         // just be a second write for the one chat that's open.
+        // An edit or a reaction arrives as the whole message again. Only a
+        // genuinely new message should send a read receipt.
+        const isUpdate = useChatStore.getState().messages.some((m) => m.id === message.id);
         addMessage(message);
 
         // If message is from someone else and chat is active, automatically send read receipt
-        if (message.senderId !== user?.id) {
+        if (!isUpdate && message.senderId !== user?.id) {
           markAsRead(convId);
           if (client && client.connected) {
             client.publish({

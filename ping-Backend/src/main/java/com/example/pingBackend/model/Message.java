@@ -1,5 +1,7 @@
 package com.example.pingBackend.model;
 
+import java.util.Map;
+import java.util.HashMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -40,6 +42,21 @@ public class Message {
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    /**
+     * Reactions, keyed by the user who left them: userId -> emoji.
+     *
+     * Keyed per person for two reasons. It enforces WhatsApp's rule of one
+     * reaction each without any extra checking. And it makes concurrent
+     * reactions safe: two people reacting at the same moment write two
+     * DIFFERENT fields (reactions.<theirId>), so neither can overwrite the
+     * other, with no locking and no read-modify-write of the whole map.
+     */
+    @Builder.Default
+    private Map<String, String> reactions = new HashMap<>();
+
+    /** When the text was last edited, or null if it never has been. */
+    private LocalDateTime editedAt;
 
     /**
      * Set when this message is a reply to someone's status.

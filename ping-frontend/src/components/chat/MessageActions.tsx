@@ -14,6 +14,8 @@ interface ActionCallbacks {
   onCreateReminder: () => void;
   onSaveToMemory: () => void;
   onReact: (emoji: string) => void;
+  /** Only passed for messages you can edit (your own text messages). */
+  onEdit?: () => void;
 }
 
 interface HoverToolbarProps extends ActionCallbacks {
@@ -33,6 +35,7 @@ export function MessageHoverToolbar({
   onCreateReminder,
   onSaveToMemory,
   onReact,
+  onEdit,
 }: HoverToolbarProps) {
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -124,6 +127,7 @@ export function MessageHoverToolbar({
             <MenuRow icon={eventIcon} label="Create event" onClick={() => { setMoreOpen(false); onCreateEvent(); }} />
             <MenuRow icon={reminderIcon} label="Create reminder" onClick={() => { setMoreOpen(false); onCreateReminder(); }} />
             <MenuRow icon={memoryIcon} label="Save to Memory" onClick={() => { setMoreOpen(false); onSaveToMemory(); }} />
+            {onEdit && <MenuRow icon={editIcon} label="Edit" onClick={() => { setMoreOpen(false); onEdit(); }} />}
           </div>
         )}
       </div>
@@ -164,6 +168,11 @@ const reminderIcon = (
   </svg>
 );
 const memoryIcon = <span className="text-sm leading-none">🧠</span>;
+const editIcon = (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+  </svg>
+);
 const replyIcon = (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 016 6v2" />
@@ -202,6 +211,7 @@ export function MessageActionSheet({
   onCreateReminder,
   onSaveToMemory,
   onReact,
+  onEdit,
 }: SheetProps) {
   const wrap = (fn: () => void) => () => {
     fn();
@@ -229,6 +239,7 @@ export function MessageActionSheet({
         <MenuRow icon={eventIcon} label="Create event" onClick={wrap(onCreateEvent)} badge={suggested.event ? "Suggested" : undefined} />
         <MenuRow icon={reminderIcon} label="Create reminder" onClick={wrap(onCreateReminder)} badge={suggested.reminder ? "Suggested" : undefined} />
         <MenuRow icon={memoryIcon} label="Save to Memory" onClick={wrap(onSaveToMemory)} />
+        {onEdit && <MenuRow icon={editIcon} label="Edit message" onClick={wrap(onEdit)} />}
         {isMine && (
           <button
             disabled

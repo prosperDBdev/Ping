@@ -208,9 +208,11 @@ const useChatStore = create<ChatState>((set, get) => ({
         return state;
       }
 
-      // Prevent duplicates
-      if (state.messages.find((m) => m.id === message.id)) {
-        return state;
+      // Already have it? Then this is an UPDATE (an edit or a reaction),
+      // sent on the same channel as new messages. Replace our copy in place;
+      // dropping it as a duplicate would silently discard the change.
+      if (state.messages.some((m) => m.id === message.id)) {
+        return { messages: state.messages.map((m) => (m.id === message.id ? message : m)) };
       }
       return { messages: [...state.messages, message] };
     });

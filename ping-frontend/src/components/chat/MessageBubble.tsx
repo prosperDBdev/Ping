@@ -1,11 +1,13 @@
 "use client";
 
+import { apiErrorMessage, editMessage, reactToMessage } from "@/lib/messages";
+import useChatStore from "@/store/chatStore";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Message } from "@/types";
 import useAuthStore from "@/store/authStore";
 import useWorkspaceStore from "@/store/workspaceStore";
-import { parseReplyQuote, snippetFor, suggestActionsForMessage } from "@/lib/messageActions";
+import { buildReplyQuote, parseReplyQuote, snippetFor, suggestActionsForMessage } from "@/lib/messageActions";
 import { MessageActionSheet, MessageHoverToolbar } from "@/components/chat/MessageActions";
 import VoiceMessagePlayer from "@/components/chat/VoiceMessagePlayer";
 import ImageAttachment from "@/components/chat/ImageAttachment";
@@ -32,12 +34,27 @@ export default function MessageBubble({
   onSaveToMemory,
 }: MessageBubbleProps) {
   const { user } = useAuthStore();
-  const { isPinned, togglePin, toggleReaction, reactionsByMessage } = useWorkspaceStore();
+  const { isPinned, togglePin } = useWorkspaceStore();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const isMine = message.senderId === user?.id;
   const pinned = isPinned(message.conversationId, message.id);
-  const reactions = reactionsByMessage[message.id] || [];
+  // Reactions now come from the server, so everyone in the chat sees the same
+  // ones. Stored as userId -> emoji; grouped here into one chip per emoji.
+  // (They used to live only on the reacting person's own device.)
+  const reactions = Object.entries(message.reactions ?? {}).reduce<{ emoji: string; userIds: string[] }[]>(
+    (groups, [userId, emoji]) => {
+      const group = groups.find((g) => g.emoji === emoji);
+      if (group) group.userIds.push(userId);
+      else groups.push({ emoji, userIds: [userId] });
+      return groups;
+    },
+    []
+  );
+  const canEdit = isMine && message.type === "TEXT";
   const { quoted, body } = parseReplyQuote(message.content);
   const suggested = suggestActionsForMessage(body);
 
@@ -83,9 +100,38 @@ export default function MessageBubble({
     toast.success(pinned ? "Unpinned" : "Pinned to Important");
   };
 
-  const handleReact = (emoji: string) => {
+  const handleReact = async (emoji: string) => {
     if (!user) return;
-    toggleReaction(message.id, emoji, user.id);
+    try {
+      // Applied straight away from the response; everyone else gets the same
+      // update over the live connection.
+      useChatStore.getState().addMessage(await reactToMessage(message.conversationId, message.id, emoji));
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't add that reaction"));
+    }
+  };
+
+  // Editing changes only the text after any reply quote, and puts the quote
+  // back on save, so a reply still reads as a reply.
+  const startEdit = () => {
+    setDraft(body);
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    const text = draft.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    try {
+      const content = quoted ? buildReplyQuote(quoted.sender, quoted.snippet, text) : text;
+      useChatStore.getState().addMessage(await editMessage(message.conversationId, message.id, content));
+      setEditing(false);
+    } catch (err) {
+      // Includes "only within 10 minutes": the server's clock decides that.
+      toast.error(apiErrorMessage(err, "Couldn't edit that message"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (message.type === "SYSTEM") {
@@ -124,6 +170,7 @@ export default function MessageBubble({
           onCreateReminder={() => onCreateReminder(message)}
           onSaveToMemory={() => onSaveToMemory(message)}
           onReact={handleReact}
+          onEdit={canEdit ? startEdit : undefined}
         />
 
         <div className={`flex items-end gap-1 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
@@ -211,6 +258,32 @@ export default function MessageBubble({
                   <p className="text-sm leading-relaxed break-words whitespace-pre-wrap font-normal">{body}</p>
                 )}
               </div>
+            ) : editing ? (
+              <div className="min-w-[200px]">
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditing(false);
+                    if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(pointer: coarse)").matches) {
+                      e.preventDefault();
+                      void saveEdit();
+                    }
+                  }}
+                  autoFocus
+                  rows={Math.min(6, Math.max(2, draft.split("\n").length))}
+                  aria-label="Edit message"
+                  className="w-full bg-transparent text-sm leading-relaxed resize-none focus:outline-none border-b border-current/30"
+                />
+                <div className="flex justify-end gap-3 mt-1.5 text-[11px]">
+                  <button type="button" onClick={() => setEditing(false)} className="font-semibold opacity-70 hover:opacity-100">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={() => void saveEdit()} disabled={!draft.trim() || saving} className="font-bold disabled:opacity-40">
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
             ) : (
               <p className="text-sm leading-relaxed break-words whitespace-pre-wrap font-normal">{body}</p>
             )}
@@ -258,6 +331,9 @@ export default function MessageBubble({
           <span className="text-[10px] font-medium text-ping-text-light dark:text-ping-night-text-light">
             {formatTime(message.createdAt)}
           </span>
+          {message.editedAt && (
+            <span className="text-[10px] italic text-ping-text-light dark:text-ping-night-text-light ml-1">edited</span>
+          )}
           {getStatusText()}
         </div>
       </div>
@@ -275,6 +351,7 @@ export default function MessageBubble({
         onCreateReminder={() => onCreateReminder(message)}
         onSaveToMemory={() => onSaveToMemory(message)}
         onReact={handleReact}
+        onEdit={canEdit ? startEdit : undefined}
       />
     </div>
   );

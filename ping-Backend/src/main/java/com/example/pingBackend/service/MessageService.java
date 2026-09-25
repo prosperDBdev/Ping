@@ -1,5 +1,15 @@
 package com.example.pingBackend.service;
 
+import static org.springframework.data.mongodb.core.query.Query.query;
+import static org.springframework.data.mongodb.core.query.Criteria.where;
+import java.util.Set;
+import java.util.Map;
+import java.time.Duration;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import com.mongodb.client.result.UpdateResult;
+import com.example.pingBackend.exception.ForbiddenException;
+import com.example.pingBackend.exception.BadRequestException;
 import com.example.pingBackend.dto.response.ConversationMediaResponse;
 import com.example.pingBackend.dto.response.MessageResponse;
 import com.example.pingBackend.model.Conversation;
@@ -25,6 +35,18 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final BlockService blockService;
+    private final MongoTemplate mongoTemplate;
+
+    /**
+     * The reactions the app offers, and the only ones accepted. A reaction is
+     * a picture, not a free-text field: allowing any string here would be a
+     * side channel for arbitrary text that bypasses everything messages go
+     * through.
+     */
+    static final Set<String> ALLOWED_REACTIONS = Set.of("👍", "❤️", "😂", "🎉", "👀");
+
+    /** How long after sending a message its text can still be changed. */
+    static final Duration EDIT_WINDOW = Duration.ofMinutes(10);
 
     // Get message history for a conversation (paginated)
     public Page<MessageResponse> getMessages(String conversationId, String userId, int page, int size) {
@@ -273,6 +295,127 @@ public class MessageService {
         }
     }
 
+    /**
+     * Add, change or remove your reaction to a message.
+     *
+     * Sending the reaction you already have removes it; anything else replaces
+     * it. The update touches only reactions.<yourId>, so it can never disturb
+     * anyone else's reaction, even if they react at the same moment.
+     */
+    public MessageResponse react(String conversationId, String messageId, String userId, String emoji) {
+        // Cheapest check first: no database work for a reaction that can't exist.
+        if (!ALLOWED_REACTIONS.contains(emoji)) {
+            throw new BadRequestException("That reaction isn't available");
+        }
+
+        requireWritableConversation(conversationId, userId);
+        Message message = findInConversation(conversationId, messageId);
+        if ("SYSTEM".equals(message.getType())) {
+            throw new BadRequestException("You can't react to that");
+        }
+
+        String current = message.getReactions() == null ? null : message.getReactions().get(userId);
+        Update update = emoji.equals(current)
+                ? new Update().unset("reactions." + userId)
+                : new Update().set("reactions." + userId, emoji);
+
+        mongoTemplate.updateFirst(
+                query(where("_id").is(messageId).and("conversationId").is(conversationId)),
+                update, Message.class);
+
+        return mapToResponse(findInConversation(conversationId, messageId));
+    }
+
+    /**
+     * Change the text of a message you sent, within 10 minutes of sending it.
+     *
+     * ALL THE RULES ARE IN THE QUERY. The update only matches a message that
+     * is in this conversation, was sent by you, is plain text, and was sent
+     * less than EDIT_WINDOW ago by the SERVER's clock. There is no "load it,
+     * check it, then save it" sequence for a request to slip between, and
+     * nothing the app sends can extend the window: a phone with its clock set
+     * back, or a modified app, still hits the same query.
+     *
+     * Only when nothing matched does the code look closer, purely to give a
+     * useful error message.
+     */
+    public MessageResponse edit(String conversationId, String messageId, String userId, String content) {
+        requireWritableConversation(conversationId, userId);
+        LocalDateTime now = LocalDateTime.now();
+
+        UpdateResult result = mongoTemplate.updateFirst(
+                query(where("_id").is(messageId)
+                        .and("conversationId").is(conversationId)
+                        .and("senderId").is(userId)
+                        .and("type").is("TEXT")
+                        .and("createdAt").gt(now.minus(EDIT_WINDOW))),
+                new Update().set("content", content).set("editedAt", now),
+                Message.class);
+
+        if (result.getMatchedCount() == 0) {
+            Message message = findInConversation(conversationId, messageId);
+            if (!userId.equals(message.getSenderId())) {
+                throw new ForbiddenException("You can only edit your own messages");
+            }
+            if (!"TEXT".equals(message.getType())) {
+                throw new BadRequestException("Only text messages can be edited");
+            }
+            throw new ForbiddenException("Messages can only be edited within 10 minutes of sending");
+        }
+
+        Message edited = findInConversation(conversationId, messageId);
+
+        // Keep the chat-list preview in step when this was the latest message.
+        // Conditional and atomic again: it only changes the preview if it still
+        // shows THIS message, so a newer message arriving meanwhile is safe.
+        mongoTemplate.updateFirst(
+                query(where("_id").is(conversationId)
+                        .and("lastMessage.senderId").is(userId)
+                        .and("lastMessage.timestamp").is(edited.getCreatedAt())),
+                new Update().set("lastMessage.content", content),
+                Conversation.class);
+
+        return mapToResponse(edited);
+    }
+
+    /**
+     * The checks every change to a message needs: you're a participant, the
+     * conversation hasn't expired, and in a one-to-one chat neither of you has
+     * blocked the other. The same rules as sending a message, so reacting and
+     * editing can't be used to reach someone sending couldn't.
+     */
+    private Conversation requireWritableConversation(String conversationId, String userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+        if (!conversation.getParticipants().contains(userId)) {
+            throw new NotFoundException("Conversation not found");
+        }
+        if (ConversationService.isExpired(conversation, LocalDateTime.now())) {
+            throw new GoneException("This temporary conversation has expired");
+        }
+        if ("PRIVATE".equals(conversation.getType())) {
+            conversation.getParticipants().stream()
+                    .filter(id -> !id.equals(userId))
+                    .findFirst()
+                    .ifPresent(otherId -> blockService.assertNotBlocked(userId, otherId));
+        }
+        return conversation;
+    }
+
+    /**
+     * A message, but only if it belongs to the conversation named in the URL.
+     *
+     * Without this check, being a participant in ANY conversation would let
+     * you react to or edit a message in any OTHER conversation just by putting
+     * its id in the path: a classic insecure direct object reference. Unknown
+     * and elsewhere look identical on purpose.
+     */
+    private Message findInConversation(String conversationId, String messageId) {
+        return messageRepository.findById(messageId)
+                .filter(m -> conversationId.equals(m.getConversationId()))
+                .orElseThrow(() -> new NotFoundException("Message not found"));
+    }
+
     private MessageResponse mapToResponse(Message message) {
         return MessageResponse.builder()
                 .id(message.getId())
@@ -286,6 +429,9 @@ public class MessageService {
                 .attachment(message.getAttachment())
                 .statusReply(message.getStatusReply())
                 .createdAt(message.getCreatedAt())
+                // Messages saved before reactions existed have no map at all.
+                .reactions(message.getReactions() == null ? Map.of() : message.getReactions())
+                .editedAt(message.getEditedAt())
                 .build();
     }
 }

@@ -79,6 +79,10 @@ export interface Message {
   status: string;
   seenBy: string[];
   attachment: MessageAttachment | null;
+  /** Reactions, keyed by the user who left them: userId -> emoji. */
+  reactions?: Record<string, string>;
+  /** Set once the message has been edited. */
+  editedAt?: string | null;
   /** Present when this message was sent as a reply to a status. */
   statusReply?: StatusReply | null;
   createdAt: string;

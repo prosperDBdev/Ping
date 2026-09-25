@@ -173,6 +173,14 @@ forge a new IP per request.
   profile (`GET /api/users/me`) and at their own login or registration. Search
   results, other users' profiles, the blocked list and conversation participant
   lists omit it entirely.
+- **Reactions** accept only the five emoji the app offers, one per person
+  (stored per user, so concurrent reactions can't overwrite each other).
+- **Edits** are allowed only to the sender, only for text messages, and only
+  within 10 minutes of sending by the server's clock. All three conditions are
+  part of the database update itself, so there is no check-then-act gap.
+- For both, the message must belong to the conversation named in the URL
+  (no reaching another chat's message by id), the usual participant and
+  blocking rules apply, and updates are never sent to anyone's inbox channel.
 - Blocking works in both directions for messaging, and blocked users are
   excluded from search.
 - Statuses honour the author's contacts, their "hide from" list, and their reshare

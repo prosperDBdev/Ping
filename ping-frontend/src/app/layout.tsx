@@ -21,7 +21,15 @@ export const metadata: Metadata = {
     // strip above the app.
     statusBarStyle: "black-translucent",
   },
+  // Declaring `icons` here switches off Next's automatic link for app/icon.svg,
+  // so the tab icon has to be listed too. Leaving it out meant the site sent
+  // only the home-screen icon and browser tabs showed nothing. SVG first
+  // (sharp at any size); the PNG is for browsers without SVG favicons.
   icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
     apple: "/icons/apple-touch-icon.png",
   },
 };
