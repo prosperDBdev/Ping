@@ -44,6 +44,32 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// A Web Push from the server: a new message while Ping may be closed.
+// If Ping is on screen right now, it has already shown its own pop-up, so the
+// push is skipped. Otherwise it becomes a notification, tagged by conversation
+// so a burst of messages replaces one notification instead of stacking.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = {};
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      if (windows.some((w) => w.visibilityState === "visible")) return undefined;
+      return self.registration.showNotification(data.title || "Ping", {
+        body: data.body || "New message",
+        tag: data.conversationId,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        data: { conversationId: data.conversationId },
+      });
+    })
+  );
+});
+
 // Tapping a message notification: bring Ping forward and open that chat.
 // An already-open tab is reused and told which conversation to show; with no
 // tab open, a new one opens straight into it via /chat?open=<id>.

@@ -1,5 +1,6 @@
 package com.example.pingBackend.controller;
 
+import com.example.pingBackend.service.PushService;
 import com.example.pingBackend.dto.request.SendMessageRequest;
 import com.example.pingBackend.dto.response.MessageResponse;
 import com.example.pingBackend.model.Message;
@@ -35,6 +36,7 @@ public class ChatController {
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
     private final PresenceService presenceService;
+    private final PushService pushService;
 
     // Handle incoming chat messages
     @MessageMapping("/chat.send")
@@ -86,14 +88,17 @@ public class ChatController {
         // arriving in a conversation you don't have open updates nothing —
         // no sidebar preview, no unread badge — because the only subscription
         // carrying it was the per-conversation one for the chat on screen.
-        conversationRepository.findById(request.getConversationId()).ifPresent(conversation ->
-                conversation.getParticipants().forEach(participantId ->
-                        messagingTemplate.convertAndSend(
-                                "/topic/user/" + participantId + "/inbox",
-                                savedMessage
-                        )
-                )
-        );
+        conversationRepository.findById(request.getConversationId()).ifPresent(conversation -> {
+            conversation.getParticipants().forEach(participantId ->
+                    messagingTemplate.convertAndSend(
+                            "/topic/user/" + participantId + "/inbox",
+                            savedMessage
+                    )
+            );
+            // And a push to each recipient's devices, for when Ping isn't
+            // open at all. Queued, so it never slows down sending.
+            pushService.notifyNewMessage(conversation, savedMessage);
+        });
 
         log.info("Message sent by {} in conversation {}", sender.getUsername(), request.getConversationId());
     }

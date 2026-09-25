@@ -1,3 +1,4 @@
+import { removePushSubscription } from "@/lib/push";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import api from "@/lib/api";
@@ -100,6 +101,11 @@ const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Stop pushes to this device for this account, so the next person to
+        // sign in here doesn't receive the last person's messages. The token
+        // is passed explicitly because the header is removed straight after.
+        const token = get().token;
+        if (token) void removePushSubscription(token).catch(() => {});
         delete api.defaults.headers.common["Authorization"];
         set({
           token: null,

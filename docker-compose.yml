@@ -80,6 +80,10 @@ services:
       BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
       BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-Ping}
       FEEDBACK_RECIPIENT_EMAIL: ${FEEDBACK_RECIPIENT_EMAIL:-}
+      # Optional: blank switches push notifications off.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:security@ebitimi.dev}
 
     # 127.0.0.1 is the important part. "8080:8080" alone would listen on every
     # interface, and Docker's own firewall rules would make it reachable from

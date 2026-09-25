@@ -83,6 +83,9 @@ the tester, the dates, and this scope. Without it, testing is not permitted.
     change it inside Mongo with `db.changeUserPassword()` *and* update `.env`.
   - the R2 access keys, in the Cloudflare dashboard
   - the Brevo API key, in the Brevo dashboard
+  - the VAPID key pair, if the tester could have read it. Note that new keys
+    silently unsubscribe every device, so everyone has to allow notifications
+    again.
 - [ ] Delete the test accounts
 - [ ] Review the logs against the tester's report
 - [ ] Restore from the snapshot if anything is in doubt
@@ -201,6 +204,23 @@ forge a new IP per request.
   storage paths.
 - Downloads are served with `X-Content-Type-Options: nosniff`, and only
   known-safe types render inline. Anything else is forced to download.
+
+### Push notifications (Web Push)
+
+- **SSRF protection:** a device's push address is accepted only if it's HTTPS,
+  on the default port, has no embedded credentials, and its host is a real push
+  service (Google FCM, Mozilla, Apple, Windows). Internal addresses, IPs,
+  lookalike domains and `user@host` tricks are refused. The HTTP client never
+  follows redirects, so an allowed address can't bounce a request elsewhere.
+- Payloads are encrypted for the recipient's browser (RFC 8291), so the push
+  services carrying them can't read them. Requests are signed with this
+  server's VAPID key (RFC 8292). The implementation is tested against the RFC's
+  published example.
+- Push addresses act as keys to a device: they are never returned by the API
+  or written to logs. A device can only be registered to, or removed by, the
+  signed-in user; signing out removes it.
+- At most 10 devices per user. Devices the push service reports as gone
+  (404/410) are deleted.
 
 ### Errors
 

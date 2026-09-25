@@ -1,5 +1,6 @@
 "use client";
 
+import { ensurePushSubscription } from "@/lib/push";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/common/Avatar";
@@ -47,6 +48,14 @@ export default function MessageNotifier() {
   const { onIncomingMessage } = useRealtime();
   const [popup, setPopup] = useState<Popup | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userId = useAuthStore((s) => s.user?.id);
+
+  // Register this device for Web Push once someone is signed in, so messages
+  // still reach them when Ping is closed. Re-running on every sign-in also
+  // re-links a shared device to whoever is using it now.
+  useEffect(() => {
+    if (userId) void ensurePushSubscription().catch(() => {});
+  }, [userId]);
 
   /** Ask the Chats page to open this conversation, going there if needed. */
   const openConversation = useCallback(

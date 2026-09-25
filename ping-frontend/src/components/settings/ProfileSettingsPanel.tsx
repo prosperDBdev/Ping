@@ -1,5 +1,6 @@
 "use client";
 
+import { ensurePushSubscription, removePushSubscription } from "@/lib/push";
 import { notificationsEnabled, requestSystemPermission, setNotificationsEnabled, systemPermission } from "@/lib/notifications";
 import { useRef, useState } from "react";
 import { AxiosError } from "axios";
@@ -80,10 +81,17 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
     const next = !notificationsOn;
     setNotificationsOn(next);
     setNotificationsEnabled(next);
+    // Push follows the toggle: turning it off stops the server sending to
+    // this device at all, not just the pop-ups.
+    void (next ? ensurePushSubscription() : removePushSubscription()).catch(() => {});
   };
 
   // Called from a tap, which browsers require before they'll show the prompt.
-  const allowOnThisDevice = async () => setPermission(await requestSystemPermission());
+  const allowOnThisDevice = async () => {
+    const result = await requestSystemPermission();
+    setPermission(result);
+    if (result === "granted") void ensurePushSubscription().catch(() => {});
+  };
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
