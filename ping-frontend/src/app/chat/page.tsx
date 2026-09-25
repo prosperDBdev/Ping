@@ -36,6 +36,7 @@ import TemporaryChatInvitePrompt from "@/components/temporary/TemporaryChatInvit
 import { fetchPendingTemporaryChatInvites } from "@/lib/temporaryChat";
 import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
 import toast from "react-hot-toast";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { parseReplyQuote, snippetFor } from "@/lib/messageActions";
@@ -325,6 +326,37 @@ export default function ChatPage() {
   const goToInbox = useCallback(() => {
     setMainView("inbox");
   }, []);
+
+  // Chats picked by holding one down (or right-clicking). While any are
+  // picked, the inbox header turns into a bar for acting on them.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmDeleteChats, setConfirmDeleteChats] = useState(false);
+  const [deletingChats, setDeletingChats] = useState(false);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  // Escape leaves selection, like closing any other mode.
+  useEffect(() => {
+    if (selectedIds.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedIds([]);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectedIds.length]);
+
+  const handleDeleteSelectedChats = async () => {
+    setDeletingChats(true);
+    const wanted = selectedIds.length;
+    const deleted = await useChatStore.getState().deleteConversationsForMe(selectedIds);
+    setDeletingChats(false);
+    setConfirmDeleteChats(false);
+    setSelectedIds([]);
+    if (deleted === wanted) toast.success(deleted === 1 ? "Chat deleted" : `${deleted} chats deleted`);
+    else toast.error(`${wanted - deleted} of ${wanted} couldn't be deleted. Try again.`);
+  };
 
   const handleSelectConversation = useCallback(
     (conv: typeof conversations[0]) => {
@@ -670,7 +702,35 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Inbox Title Bar */}
+              {/* Inbox Title Bar, or the selection bar while chats are picked */}
+              {selectedIds.length > 0 ? (
+                <div role="toolbar" aria-label="Selected chats" className="px-4 pt-3 pb-2 flex items-center justify-between gap-3 min-h-[60px]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={() => setSelectedIds([])}
+                      aria-label="Cancel selection"
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-ping-dark dark:text-ping-night-text hover:bg-ping-cream-dark dark:hover:bg-ping-night-card transition flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <p className="text-base sm:text-lg font-bold text-ping-dark dark:text-ping-night-text truncate">
+                      {selectedIds.length} selected
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setConfirmDeleteChats(true)}
+                    aria-label={selectedIds.length === 1 ? "Delete chat" : "Delete chats"}
+                    title="Delete"
+                    className="w-9 h-9 bg-red-500 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition shadow-xs flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
               <div className="px-4 pt-3 pb-2 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-ping-text-light dark:text-ping-night-text-light">
@@ -690,6 +750,7 @@ export default function ChatPage() {
                   </svg>
                 </button>
               </div>
+              )}
 
               {/* Search Bar */}
               <div className="px-4 pb-2">
@@ -760,6 +821,9 @@ export default function ChatPage() {
                         conversation={conv}
                         isActive={activeConversation?.id === conv.id}
                         onClick={() => handleSelectConversation(conv)}
+                        onSelect={() => toggleSelected(conv.id)}
+                        selectionMode={selectedIds.length > 0}
+                        selected={selectedIds.includes(conv.id)}
                       />
                     ))}
 
@@ -779,6 +843,9 @@ export default function ChatPage() {
                             conversation={conv}
                             isActive={activeConversation?.id === conv.id}
                             onClick={() => handleSelectConversation(conv)}
+                            onSelect={() => toggleSelected(conv.id)}
+                            selectionMode={selectedIds.length > 0}
+                            selected={selectedIds.includes(conv.id)}
                           />
                         ))}
                       </div>
@@ -1051,6 +1118,18 @@ export default function ChatPage() {
           remainingCount={pendingTempInvites.length - 1}
           onRespond={handleRespondToTempInvite}
           onClose={() => dismissTempInvite(pendingTempInvites[0].id)}
+        />
+      )}
+
+      {confirmDeleteChats && (
+        <ConfirmDialog
+          title={selectedIds.length === 1 ? "Delete this chat?" : `Delete ${selectedIds.length} chats?`}
+          body="They'll disappear from your chat list and their messages will be cleared for you. The other person keeps their copy. A chat comes back if someone sends a new message."
+          confirmLabel="Delete"
+          destructive
+          isWorking={deletingChats}
+          onConfirm={() => void handleDeleteSelectedChats()}
+          onCancel={() => setConfirmDeleteChats(false)}
         />
       )}
 

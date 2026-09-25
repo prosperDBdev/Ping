@@ -90,6 +90,20 @@ public class ConversationController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * "Delete chat" from your chat list (and clear it for you). Only your
+     * view changes. Like /clear, nothing is actually deleted, which is why it
+     * isn't a DELETE on the conversation itself.
+     */
+    @DeleteMapping("/{id}/from-my-list")
+    public ResponseEntity<Void> deleteFromMyList(
+            @PathVariable String id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        conversationService.deleteForMe(id, currentUser.getId());
+        return ResponseEntity.noContent().build();
+    }
+
     /** Remove a member from a group. Admin only — enforced in the service. */
     @DeleteMapping("/{id}/participants/{userId}")
     public ResponseEntity<Void> removeParticipant(

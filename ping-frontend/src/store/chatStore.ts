@@ -31,6 +31,12 @@ interface ChatState {
   setLastMessagePreview: (conversationId: string, sentAt: string, content: string) => void;
   upsertConversation: (conversation: Conversation) => void;
   updateConversationLastMessage: (conversationId: string, message: Message) => void;
+  /**
+   * "Delete chat" for each id: gone from your list and cleared for you. The
+   * other person keeps theirs. A chat comes back when a new message arrives.
+   * Resolves with how many were deleted.
+   */
+  deleteConversationsForMe: (conversationIds: string[]) => Promise<number>;
   createPrivateConversation: (participantId: string) => Promise<Conversation>;
   createGroupConversation: (name: string, participantIds: string[]) => Promise<Conversation>;
   markAsRead: (conversationId: string) => Promise<void>;
@@ -258,6 +264,17 @@ const useChatStore = create<ChatState>((set, get) => ({
   },
 
   updateConversationLastMessage: (conversationId: string, message: Message) => {
+    // A message for a chat that isn't in the list: one you deleted (it comes
+    // back now, like WhatsApp), or one someone just started with you. Fetch
+    // it: the server's copy already counts this message as unread and only
+    // previews what's newer than your deletion.
+    if (!get().conversations.some((c) => c.id === conversationId)) {
+      api
+        .get(`/conversations/${conversationId}`)
+        .then((res) => get().upsertConversation(res.data as Conversation))
+        .catch(() => {});
+      return;
+    }
     set((state) => {
       const updated = state.conversations.map((conv) => {
         if (conv.id === conversationId) {
@@ -289,6 +306,18 @@ const useChatStore = create<ChatState>((set, get) => ({
 
       return { conversations: updated };
     });
+  },
+
+  deleteConversationsForMe: async (conversationIds: string[]) => {
+    const results = await Promise.allSettled(
+      conversationIds.map((id) => api.delete(`/conversations/${id}/from-my-list`))
+    );
+    const deleted = conversationIds.filter((_, i) => results[i].status === "fulfilled");
+    set((state) => ({ conversations: state.conversations.filter((c) => !deleted.includes(c.id)) }));
+    // Deleting the chat that's open closes it.
+    const active = get().activeConversation;
+    if (active && deleted.includes(active.id)) get().clearChat();
+    return deleted.length;
   },
 
   createPrivateConversation: async (participantId: string) => {

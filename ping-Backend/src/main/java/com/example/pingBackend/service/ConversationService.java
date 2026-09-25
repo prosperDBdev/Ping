@@ -9,6 +9,10 @@ import com.example.pingBackend.repository.ConversationRepository;
 import com.example.pingBackend.repository.UserRepository;
 import com.example.pingBackend.security.SubscriptionRevoker;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Update;
+import static org.springframework.data.mongodb.core.query.Criteria.where;
+import static org.springframework.data.mongodb.core.query.Query.query;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +39,7 @@ public class ConversationService {
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
     private final SubscriptionRevoker subscriptionRevoker;
+    private final MongoTemplate mongoTemplate;
 
     // Create or get existing private conversation
     public ConversationResponse createPrivateConversation(String currentUserId, String participantId) {
@@ -304,8 +309,49 @@ public class ConversationService {
                 .findByParticipantsContainingOrderByUpdatedAtDesc(userId)
                 .stream()
                 .filter(conv -> !isExpired(conv, now))
+                .filter(conv -> !hiddenFrom(conv, userId))
                 .map(conv -> mapToResponse(conv, userId))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Deleted from this person's chat list, and nothing new has arrived since.
+     * A message sent after the deletion brings the chat back.
+     */
+    static boolean hiddenFrom(Conversation conversation, String userId) {
+        LocalDateTime hidden = conversation.getHiddenAt() == null ? null : conversation.getHiddenAt().get(userId);
+        if (hidden == null) {
+            return false;
+        }
+        Conversation.LastMessage last = conversation.getLastMessage();
+        return last == null || last.getTimestamp() == null || !last.getTimestamp().isAfter(hidden);
+    }
+
+    /**
+     * "Delete chat": remove it from YOUR chat list and clear its messages for
+     * you. The other person's list and history are untouched, and nothing is
+     * deleted from the database. It's the same per-user marker as "clear chat",
+     * plus one saying to hide it until something new arrives.
+     *
+     * One atomic update of three per-user fields. Loading the conversation and
+     * saving it back would risk overwriting a message that lands in between
+     * (its last-message preview and unread counts live on the same document).
+     */
+    public void deleteForMe(String conversationId, String userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+        if (!conversation.getParticipants().contains(userId)) {
+            throw new NotFoundException("Conversation not found");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        mongoTemplate.updateFirst(
+                query(where("_id").is(conversationId).and("participants").is(userId)),
+                new Update()
+                        .set("hiddenAt." + userId, now)
+                        .set("clearedAt." + userId, now)
+                        .set("unreadCount." + userId, 0),
+                Conversation.class);
     }
 
     // Get a specific conversation

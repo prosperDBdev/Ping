@@ -56,6 +56,17 @@ public class Conversation {
     @Builder.Default
     private Map<String, LocalDateTime> clearedAt = new HashMap<>();
 
+    /**
+     * When each person deleted this chat from their chat list, if they did.
+     *
+     * Per user, like clearedAt, and for the same reason: deleting a chat from
+     * YOUR list must not touch the other person's. The chat stays hidden from
+     * you until a message newer than this arrives, then comes back showing only
+     * what was sent after you deleted it (clearedAt is set at the same moment).
+     */
+    @Builder.Default
+    private Map<String, LocalDateTime> hiddenAt = new HashMap<>();
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 

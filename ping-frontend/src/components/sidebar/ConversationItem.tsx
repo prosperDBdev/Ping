@@ -5,19 +5,37 @@ import Avatar from "@/components/common/Avatar";
 import { Conversation } from "@/types";
 import useAuthStore from "@/store/authStore";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
+import useLongPress from "@/hooks/useLongPress";
 
 interface ConversationItemProps {
   conversation: Conversation;
   isActive: boolean;
   onClick: () => void;
+  /**
+   * Hold (or right-click) to select. While anything is selected, a tap
+   * toggles selection instead of opening the chat, like WhatsApp.
+   */
+  onSelect?: () => void;
+  selectionMode?: boolean;
+  selected?: boolean;
 }
 
 export default function ConversationItem({
   conversation,
   isActive,
   onClick,
+  onSelect,
+  selectionMode = false,
+  selected = false,
 }: ConversationItemProps) {
   const { user: currentUser } = useAuthStore();
+  const { handlers, wasLongPress } = useLongPress(() => onSelect?.());
+
+  const handleClick = () => {
+    if (wasLongPress()) return; // the end of a hold, not a tap
+    if (selectionMode && onSelect) onSelect();
+    else onClick();
+  };
   const isTemporary = conversation.temporary && conversation.expiresAt;
   const isGroup = conversation.type === "GROUP";
 
@@ -66,11 +84,17 @@ export default function ConversationItem({
 
   return (
     <button
-      onClick={onClick}
-      className={`w-[calc(100%-1rem)] mx-2 my-1 flex items-center gap-3 px-3.5 py-3 rounded-2xl transition text-left ${
-        isActive
-          ? "bg-ping-cream-dark dark:bg-ping-night-card-active border border-[#DFD7CC]/60 dark:border-ping-night-border"
-          : "hover:bg-ping-cream/80 dark:hover:bg-ping-night-card border border-transparent"
+      onClick={handleClick}
+      {...(onSelect ? handlers : {})}
+      aria-pressed={selectionMode ? selected : undefined}
+      // select-none and no touch callout: holding a row selects it rather
+      // than highlighting its text or opening the phone's own menu.
+      className={`w-[calc(100%-1rem)] mx-2 my-1 flex items-center gap-3 px-3.5 py-3 rounded-2xl transition text-left select-none [-webkit-touch-callout:none] ${
+        selected
+          ? "bg-ping-teal/10 dark:bg-ping-teal-light/10 border border-ping-teal/40 dark:border-ping-teal-light/40"
+          : isActive && !selectionMode
+            ? "bg-ping-cream-dark dark:bg-ping-night-card-active border border-[#DFD7CC]/60 dark:border-ping-night-border"
+            : "hover:bg-ping-cream/80 dark:hover:bg-ping-night-card border border-transparent"
       }`}
     >
       {/* Avatar */}
@@ -90,8 +114,15 @@ export default function ConversationItem({
             fallbackClassName={avatarColors[colorIndex]}
           />
         )}
-        {!isGroup && isOnline && (
+        {!isGroup && isOnline && !selected && (
           <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-ping-green rounded-full border-2 border-white dark:border-ping-night-surface" />
+        )}
+        {selected && (
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-ping-teal dark:bg-ping-teal-light rounded-full border-2 border-white dark:border-ping-night-surface flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3.5} viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
         )}
       </div>
 

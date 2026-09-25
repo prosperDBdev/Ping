@@ -94,7 +94,7 @@ class EmailPrivacyTest {
     @DisplayName("a conversation's participant list carries no email addresses")
     void participantsHideEmails() {
         ConversationService conversations =
-                new ConversationService(null, userRepository, null, null, null, null);
+                new ConversationService(null, userRepository, null, null, null, null, null);
         Conversation chat = Conversation.builder()
                 .id("c1").type("PRIVATE")
                 .participants(new ArrayList<>(List.of("alice-id", "bob-id")))

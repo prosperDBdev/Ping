@@ -234,6 +234,10 @@ forge a new IP per request.
   can't be edited or reacted to.
 - **Delete for me** hides a message from the caller only, and is filtered in
   the history query itself. Who has hidden what is never returned by the API.
+- **Deleting a chat** from your chat list is per user and participants only:
+  it hides the conversation from your list and clears it for you, in one
+  atomic update of your own fields. Nothing is deleted, and the other
+  participant's list and history are untouched.
 - For all of these, the message must belong to the conversation named in the URL
   (no reaching another chat's message by id), the usual participant and
   blocking rules apply, and updates are never sent to anyone's inbox channel.
