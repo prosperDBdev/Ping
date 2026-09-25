@@ -7,7 +7,7 @@ This document is for security researchers and penetration testers. It covers how
 to report a problem, what may be tested and how, the controls already in place,
 and the limitations that are already known.
 
-*Last reviewed: 24 September 2026.*
+*Last reviewed: 25 September 2026.*
 
 ---
 
@@ -181,7 +181,14 @@ forge a new IP per request.
 - **Edits** are allowed only to the sender, only for text messages, and only
   within 10 minutes of sending by the server's clock. All three conditions are
   part of the database update itself, so there is no check-then-act gap.
-- For both, the message must belong to the conversation named in the URL
+- **Delete for everyone** is allowed only to the sender, within 48 hours of
+  sending by the server's clock, and those conditions are part of the database
+  update. It clears the text, attachment, reactions and status quote (the
+  stored file is removed too), leaving a "deleted" marker. A deleted message
+  can't be edited or reacted to.
+- **Delete for me** hides a message from the caller only, and is filtered in
+  the history query itself. Who has hidden what is never returned by the API.
+- For all of these, the message must belong to the conversation named in the URL
   (no reaching another chat's message by id), the usual participant and
   blocking rules apply, and updates are never sent to anyone's inbox channel.
 - Blocking works in both directions for messaging, and blocked users are
@@ -285,3 +292,6 @@ owner if you find a way one of them is worse than described.
 13. **Messages are not end-to-end encrypted.** They are encrypted in transit
     (HTTPS/WSS) but stored readable on the server, so anyone with access to the
     server or the database can read them.
+14. **"Delete for everyone" can't recall copies that already left the server:**
+    a push notification already shown on someone's phone, or a screenshot.
+    The same is true of every messaging app.

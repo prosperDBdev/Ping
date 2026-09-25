@@ -183,7 +183,10 @@ public class PushService {
             payload = JSON.writeValueAsBytes(Map.of(
                     "title", title == null ? "Ping" : title,
                     "body", preview(message),
-                    "conversationId", conversation.getId()));
+                    "conversationId", conversation.getId(),
+                    // Lets the phone recognise a message it has already shown
+                    // (the open tab may have announced it first) and not buzz twice.
+                    "messageId", message.getId() == null ? "" : message.getId()));
         } catch (RuntimeException e) {
             log.warn("Couldn't build a push payload: {}", e.getMessage());
             return;

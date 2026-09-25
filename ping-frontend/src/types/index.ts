@@ -83,6 +83,8 @@ export interface Message {
   reactions?: Record<string, string>;
   /** Set once the message has been edited. */
   editedAt?: string | null;
+  /** Set when the sender deleted it for everyone: render a "deleted" marker. */
+  deletedAt?: string | null;
   /** Present when this message was sent as a reply to a status. */
   statusReply?: StatusReply | null;
   createdAt: string;

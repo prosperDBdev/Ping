@@ -16,6 +16,8 @@ interface ActionCallbacks {
   onReact: (emoji: string) => void;
   /** Only passed for messages you can edit (your own text messages). */
   onEdit?: () => void;
+  /** Opens the delete choices (for me / for everyone). */
+  onDelete: () => void;
 }
 
 interface HoverToolbarProps extends ActionCallbacks {
@@ -36,6 +38,7 @@ export function MessageHoverToolbar({
   onSaveToMemory,
   onReact,
   onEdit,
+  onDelete,
 }: HoverToolbarProps) {
   const [reactionsOpen, setReactionsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -128,6 +131,7 @@ export function MessageHoverToolbar({
             <MenuRow icon={reminderIcon} label="Create reminder" onClick={() => { setMoreOpen(false); onCreateReminder(); }} />
             <MenuRow icon={memoryIcon} label="Save to Memory" onClick={() => { setMoreOpen(false); onSaveToMemory(); }} />
             {onEdit && <MenuRow icon={editIcon} label="Edit" onClick={() => { setMoreOpen(false); onEdit(); }} />}
+            <MenuRow icon={trashIcon} label="Delete" danger onClick={() => { setMoreOpen(false); onDelete(); }} />
           </div>
         )}
       </div>
@@ -135,13 +139,27 @@ export function MessageHoverToolbar({
   );
 }
 
-function MenuRow({ icon, label, onClick, badge }: { icon: React.ReactNode; label: string; onClick: () => void; badge?: string }) {
+function MenuRow({
+  icon,
+  label,
+  onClick,
+  badge,
+  danger = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  badge?: string;
+  danger?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-medium text-ping-dark dark:text-ping-night-text hover:bg-ping-cream-dark/70 dark:hover:bg-ping-night-card-active transition text-left"
+      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-medium ${
+        danger ? "text-red-500 dark:text-red-400" : "text-ping-dark dark:text-ping-night-text"
+      } hover:bg-ping-cream-dark/70 dark:hover:bg-ping-night-card-active transition text-left`}
     >
-      <span className="text-ping-teal dark:text-ping-teal-light flex-shrink-0">{icon}</span>
+      <span className={`${danger ? "" : "text-ping-teal dark:text-ping-teal-light"} flex-shrink-0`}>{icon}</span>
       <span className="flex-1">{label}</span>
       {badge && (
         <span className="text-[9px] font-bold uppercase tracking-wide text-ping-orange bg-ping-orange/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
@@ -193,7 +211,6 @@ interface SheetProps extends ActionCallbacks {
   open: boolean;
   onClose: () => void;
   isPinned: boolean;
-  isMine: boolean;
   suggested: SuggestedActions;
 }
 
@@ -202,7 +219,6 @@ export function MessageActionSheet({
   open,
   onClose,
   isPinned,
-  isMine,
   suggested,
   onReply,
   onPin,
@@ -212,6 +228,7 @@ export function MessageActionSheet({
   onSaveToMemory,
   onReact,
   onEdit,
+  onDelete,
 }: SheetProps) {
   const wrap = (fn: () => void) => () => {
     fn();
@@ -240,19 +257,7 @@ export function MessageActionSheet({
         <MenuRow icon={reminderIcon} label="Create reminder" onClick={wrap(onCreateReminder)} badge={suggested.reminder ? "Suggested" : undefined} />
         <MenuRow icon={memoryIcon} label="Save to Memory" onClick={wrap(onSaveToMemory)} />
         {onEdit && <MenuRow icon={editIcon} label="Edit message" onClick={wrap(onEdit)} />}
-        {isMine && (
-          <button
-            disabled
-            title="Deleting messages isn't connected to the backend yet"
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-medium text-red-400/60 dark:text-red-400/40 cursor-not-allowed text-left"
-          >
-            <span className="flex-shrink-0">{trashIcon}</span>
-            <span className="flex-1">Delete</span>
-            <span className="text-[9px] font-bold uppercase tracking-wide text-ping-text-light dark:text-ping-night-text-light">
-              Soon
-            </span>
-          </button>
-        )}
+        <MenuRow icon={trashIcon} label="Delete" danger onClick={wrap(onDelete)} />
       </div>
     </Sheet>
   );

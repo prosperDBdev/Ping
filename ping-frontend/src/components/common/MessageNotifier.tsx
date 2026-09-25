@@ -96,7 +96,7 @@ export default function MessageNotifier() {
         if (hideTimer.current) clearTimeout(hideTimer.current);
         hideTimer.current = setTimeout(() => setPopup(null), 5000);
       } else {
-        void showSystemNotification(title, body, message.conversationId);
+        void showSystemNotification(title, body, message.conversationId, message.id);
       }
     });
   }, [onIncomingMessage]);

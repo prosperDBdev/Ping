@@ -1,5 +1,7 @@
 package com.example.pingBackend.service;
 
+import lombok.extern.slf4j.Slf4j;
+import java.util.HashMap;
 import static org.springframework.data.mongodb.core.query.Query.query;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 import java.util.Set;
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 import com.example.pingBackend.exception.NotFoundException;
 import com.example.pingBackend.exception.GoneException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MessageService {
@@ -36,6 +39,13 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final BlockService blockService;
     private final MongoTemplate mongoTemplate;
+    private final MediaStorageService mediaStorageService;
+
+    /** How long after sending you can still delete a message for everyone. */
+    static final Duration DELETE_FOR_EVERYONE_WINDOW = Duration.ofHours(48);
+
+    /** What the chat list shows in place of a message deleted for everyone. */
+    static final String DELETED_PREVIEW = "This message was deleted";
 
     /**
      * The reactions the app offers, and the only ones accepted. A reaction is
@@ -77,9 +87,9 @@ public class MessageService {
         // dropping cleared messages after paging would return short pages (ask
         // for 50, get 12) and make "is there more?" wrong.
         return (clearedAt == null
-                ? messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable)
-                : messageRepository.findByConversationIdAndCreatedAtAfterOrderByCreatedAtDesc(
-                        conversationId, clearedAt, pageable))
+                ? messageRepository.findByConversationIdAndHiddenForNotOrderByCreatedAtDesc(conversationId, userId, pageable)
+                : messageRepository.findByConversationIdAndCreatedAtAfterAndHiddenForNotOrderByCreatedAtDesc(
+                        conversationId, clearedAt, userId, pageable))
                 .map(this::mapToResponse);
     }
 
@@ -245,6 +255,7 @@ public class MessageService {
                 .findByConversationIdAndAttachmentNotNullOrderByCreatedAtDesc(conversationId)
                 .stream()
                 .filter(message -> clearedAt == null || message.getCreatedAt().isAfter(clearedAt))
+                .filter(message -> message.getHiddenFor() == null || !message.getHiddenFor().contains(userId))
                 .map(message -> {
                     Message.Attachment attachment = message.getAttachment();
                     return ConversationMediaResponse.builder()
@@ -313,6 +324,9 @@ public class MessageService {
         if ("SYSTEM".equals(message.getType())) {
             throw new BadRequestException("You can't react to that");
         }
+        if (message.getDeletedAt() != null) {
+            throw new BadRequestException("That message was deleted");
+        }
 
         String current = message.getReactions() == null ? null : message.getReactions().get(userId);
         Update update = emoji.equals(current)
@@ -348,6 +362,7 @@ public class MessageService {
                         .and("conversationId").is(conversationId)
                         .and("senderId").is(userId)
                         .and("type").is("TEXT")
+                        .and("deletedAt").is(null)
                         .and("createdAt").gt(now.minus(EDIT_WINDOW))),
                 new Update().set("content", content).set("editedAt", now),
                 Message.class);
@@ -359,6 +374,9 @@ public class MessageService {
             }
             if (!"TEXT".equals(message.getType())) {
                 throw new BadRequestException("Only text messages can be edited");
+            }
+            if (message.getDeletedAt() != null) {
+                throw new BadRequestException("That message was deleted");
             }
             throw new ForbiddenException("Messages can only be edited within 10 minutes of sending");
         }
@@ -379,12 +397,85 @@ public class MessageService {
     }
 
     /**
-     * The checks every change to a message needs: you're a participant, the
-     * conversation hasn't expired, and in a one-to-one chat neither of you has
-     * blocked the other. The same rules as sending a message, so reacting and
-     * editing can't be used to reach someone sending couldn't.
+     * Delete a message you sent, for everyone in the chat.
+     *
+     * Like editing, every rule is part of the update itself: your message, not
+     * already deleted, not a system note, sent less than 48 hours ago by the
+     * server's clock. What's left is a marker with no text, file, reactions or
+     * quoted status. Returned so the caller can broadcast it.
+     *
+     * Blocking isn't checked here on purpose: removing your own words from a
+     * conversation should always be possible, even with someone you've blocked.
      */
-    private Conversation requireWritableConversation(String conversationId, String userId) {
+    public MessageResponse deleteForEveryone(String conversationId, String messageId, String userId) {
+        requireParticipant(conversationId, userId);
+        Message before = findInConversation(conversationId, messageId);
+        LocalDateTime now = LocalDateTime.now();
+
+        UpdateResult result = mongoTemplate.updateFirst(
+                query(where("_id").is(messageId)
+                        .and("conversationId").is(conversationId)
+                        .and("senderId").is(userId)
+                        .and("deletedAt").is(null)
+                        .and("type").ne("SYSTEM")
+                        .and("createdAt").gt(now.minus(DELETE_FOR_EVERYONE_WINDOW))),
+                new Update()
+                        .set("deletedAt", now)
+                        .set("content", "")
+                        .set("reactions", new HashMap<String, String>())
+                        .unset("attachment")
+                        .unset("statusReply")
+                        .unset("editedAt"),
+                Message.class);
+
+        if (result.getMatchedCount() == 0) {
+            if (!userId.equals(before.getSenderId())) {
+                throw new ForbiddenException("You can only delete your own messages for everyone");
+            }
+            if (before.getDeletedAt() != null) {
+                return mapToResponse(before); // already deleted: nothing to do
+            }
+            throw new ForbiddenException("Messages can only be deleted for everyone within 48 hours");
+        }
+
+        // The file goes too. Clearing the attachment already stops the download
+        // endpoint serving it (access is checked through the message), but a
+        // "deleted" photo shouldn't sit in storage either. Best effort: the
+        // message is deleted even if storage is briefly unreachable.
+        if (before.getAttachment() != null && before.getAttachment().getKey() != null) {
+            try {
+                mediaStorageService.deleteObject(before.getAttachment().getKey());
+            } catch (RuntimeException e) {
+                log.warn("Couldn't remove a deleted message's file from storage: {}", e.getMessage());
+            }
+        }
+
+        // Keep the chat-list preview honest if this was the latest message.
+        mongoTemplate.updateFirst(
+                query(where("_id").is(conversationId)
+                        .and("lastMessage.senderId").is(userId)
+                        .and("lastMessage.timestamp").is(before.getCreatedAt())),
+                new Update().set("lastMessage.content", DELETED_PREVIEW),
+                Conversation.class);
+
+        return mapToResponse(findInConversation(conversationId, messageId));
+    }
+
+    /**
+     * Hide a message from yourself only. Any message you can see, yours or
+     * not; everyone else keeps it. $addToSet, so doing it twice is harmless.
+     */
+    public void deleteForMe(String conversationId, String messageId, String userId) {
+        requireParticipant(conversationId, userId);
+        findInConversation(conversationId, messageId);
+        mongoTemplate.updateFirst(
+                query(where("_id").is(messageId).and("conversationId").is(conversationId)),
+                new Update().addToSet("hiddenFor", userId),
+                Message.class);
+    }
+
+    /** You're in this conversation and it hasn't expired. */
+    private Conversation requireParticipant(String conversationId, String userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
         if (!conversation.getParticipants().contains(userId)) {
@@ -393,6 +484,17 @@ public class MessageService {
         if (ConversationService.isExpired(conversation, LocalDateTime.now())) {
             throw new GoneException("This temporary conversation has expired");
         }
+        return conversation;
+    }
+
+    /**
+     * The checks every change to a message needs: you're a participant, the
+     * conversation hasn't expired, and in a one-to-one chat neither of you has
+     * blocked the other. The same rules as sending a message, so reacting and
+     * editing can't be used to reach someone sending couldn't.
+     */
+    private Conversation requireWritableConversation(String conversationId, String userId) {
+        Conversation conversation = requireParticipant(conversationId, userId);
         if ("PRIVATE".equals(conversation.getType())) {
             conversation.getParticipants().stream()
                     .filter(id -> !id.equals(userId))
@@ -432,6 +534,7 @@ public class MessageService {
                 // Messages saved before reactions existed have no map at all.
                 .reactions(message.getReactions() == null ? Map.of() : message.getReactions())
                 .editedAt(message.getEditedAt())
+                .deletedAt(message.getDeletedAt())
                 .build();
     }
 }

@@ -1,5 +1,6 @@
 package com.example.pingBackend.controller;
 
+import com.example.pingBackend.exception.BadRequestException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import jakarta.validation.Valid;
 import com.example.pingBackend.dto.request.ReactionRequest;
@@ -70,6 +71,31 @@ public class MessageController {
         MessageResponse updated = messageService.edit(conversationId, messageId, currentUser.getId(), request.getContent());
         messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, updated);
         return ResponseEntity.ok(updated);
+    }
+
+    /**
+     * DELETE ...?scope=everyone : your own message, for everyone (48 hours).
+     *                             The marker is broadcast like an edit.
+     * DELETE ...?scope=me       : any message, hidden from you only. Nothing
+     *                             is broadcast; nobody else's view changes.
+     */
+    @DeleteMapping("/{messageId}")
+    public ResponseEntity<MessageResponse> delete(
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @RequestParam(defaultValue = "me") String scope,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        if ("everyone".equals(scope)) {
+            MessageResponse marker = messageService.deleteForEveryone(conversationId, messageId, currentUser.getId());
+            messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, marker);
+            return ResponseEntity.ok(marker);
+        }
+        if ("me".equals(scope)) {
+            messageService.deleteForMe(conversationId, messageId, currentUser.getId());
+            return ResponseEntity.noContent().build();
+        }
+        throw new BadRequestException("scope must be 'everyone' or 'me'");
     }
 
     @GetMapping("/media")

@@ -21,6 +21,14 @@ interface ChatState {
   fetchMessages: (conversationId: string, page?: number) => Promise<void>;
   loadMoreMessages: () => Promise<void>;
   addMessage: (message: Message) => void;
+  /** Drop a message from the open chat ("Delete for me"). */
+  removeMessage: (messageId: string) => void;
+  /**
+   * Change the chat-list preview text, but only if it still shows the message
+   * sent at `sentAt` (a deletion or edit of the latest message). Never touches
+   * unread counts or ordering, unlike updateConversationLastMessage.
+   */
+  setLastMessagePreview: (conversationId: string, sentAt: string, content: string) => void;
   upsertConversation: (conversation: Conversation) => void;
   updateConversationLastMessage: (conversationId: string, message: Message) => void;
   createPrivateConversation: (participantId: string) => Promise<Conversation>;
@@ -216,6 +224,22 @@ const useChatStore = create<ChatState>((set, get) => ({
       }
       return { messages: [...state.messages, message] };
     });
+  },
+
+  removeMessage: (messageId: string) => {
+    set((state) => ({ messages: state.messages.filter((m) => m.id !== messageId) }));
+  },
+
+  setLastMessagePreview: (conversationId: string, sentAt: string, content: string) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId &&
+        conv.lastMessage &&
+        new Date(conv.lastMessage.timestamp).getTime() === new Date(sentAt).getTime()
+          ? { ...conv, lastMessage: { ...conv.lastMessage, content } }
+          : conv
+      ),
+    }));
   },
 
   // Insert a conversation, or replace it if it's already in the list. Used by

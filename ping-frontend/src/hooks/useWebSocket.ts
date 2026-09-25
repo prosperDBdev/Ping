@@ -5,6 +5,7 @@ import { Client } from "@stomp/stompjs";
 import { createStompClient, disconnectStomp } from "@/lib/stompClient";
 import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
+import { DELETED_PREVIEW } from "@/lib/messages";
 import {
   Conversation,
   Message,
@@ -170,6 +171,11 @@ export default function useWebSocket() {
         // genuinely new message should send a read receipt.
         const isUpdate = useChatStore.getState().messages.some((m) => m.id === message.id);
         addMessage(message);
+        // Deleted for everyone: if it was the latest message, the chat list
+        // should stop previewing the words that were just taken back.
+        if (message.deletedAt) {
+          useChatStore.getState().setLastMessagePreview(convId, message.createdAt, DELETED_PREVIEW);
+        }
 
         // If message is from someone else and chat is active, automatically send read receipt
         if (!isUpdate && message.senderId !== user?.id) {

@@ -490,7 +490,12 @@ export default function ChatPage() {
       // generally assumes US-style MM/DD/YYYY, so a DD/MM/YYYY locale
       // string parses as nonsense (or not at all) depending on the
       // runtime's locale. Keep the original ISO string intact instead.
-      const key = msg.createdAt.slice(0, 10);
+      //
+      // The KEY is the LOCAL calendar day. Timestamps arrive in UTC ("...Z"),
+      // so slicing the first 10 characters gave the UTC date: a message sent
+      // at 00:30 in Lagos (23:30 UTC) landed under "yesterday". toDateString()
+      // is the day on this phone's calendar; it's only compared, never parsed.
+      const key = new Date(msg.createdAt).toDateString();
       if (key !== currentKey) {
         currentKey = key;
         groups.push({ date: msg.createdAt, messages: [msg] });

@@ -48,6 +48,12 @@ self.addEventListener("activate", (event) => {
 // If Ping is on screen right now, it has already shown its own pop-up, so the
 // push is skipped. Otherwise it becomes a notification, tagged by conversation
 // so a burst of messages replaces one notification instead of stacking.
+//
+// renotify: WITHOUT it, a notification that replaces one with the same tag
+// arrives SILENTLY: no sound, no vibration, no pop-up at the top of the
+// screen, just a quietly updated entry in the shade. That's why a second
+// message from the same person seemed not to "come like a notification".
+// With it, every new message alerts again.
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -57,14 +63,25 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+    Promise.all([
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }),
+      self.registration.getNotifications({ tag: data.conversationId }),
+    ]).then(([windows, shown]) => {
       if (windows.some((w) => w.visibilityState === "visible")) return undefined;
+      // A tab left open in the background may have announced this very
+      // message already. Showing it again would buzz twice for one message.
+      if (data.messageId && shown.some((n) => n.data && n.data.messageId === data.messageId)) {
+        return undefined;
+      }
       return self.registration.showNotification(data.title || "Ping", {
         body: data.body || "New message",
         tag: data.conversationId,
+        renotify: true,
+        silent: false,
+        vibrate: [200, 100, 200],
         icon: "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
-        data: { conversationId: data.conversationId },
+        data: { conversationId: data.conversationId, messageId: data.messageId },
       });
     })
   );

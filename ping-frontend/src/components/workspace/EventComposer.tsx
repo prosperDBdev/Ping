@@ -17,8 +17,12 @@ interface EventComposerProps {
   onSaved?: (event: CalendarEvent) => void;
 }
 
+// Today on this phone's calendar. toISOString() would give the UTC date,
+// which is yesterday for the first hour after midnight in Lagos.
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export default function EventComposer({

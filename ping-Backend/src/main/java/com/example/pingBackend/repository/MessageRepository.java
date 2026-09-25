@@ -25,6 +25,16 @@ public interface MessageRepository extends MongoRepository<Message, String> {
     // Find messages for a conversation, paginated, newest first
     Page<Message> findByConversationIdOrderByCreatedAtDesc(String conversationId, Pageable pageable);
 
+    // The same two history queries, minus anything this user deleted "for me".
+    // HiddenForNot becomes { hiddenFor: { $ne: userId } }, which on an array
+    // means "doesn't contain it". Filtering in the query rather than after
+    // keeps pages full: ask for 50, get 50.
+    Page<Message> findByConversationIdAndHiddenForNotOrderByCreatedAtDesc(
+            String conversationId, String userId, Pageable pageable);
+
+    Page<Message> findByConversationIdAndCreatedAtAfterAndHiddenForNotOrderByCreatedAtDesc(
+            String conversationId, java.time.LocalDateTime after, String userId, Pageable pageable);
+
     // Same, but only messages newer than the caller's "clear chat" marker.
     // Filtering in the query rather than on the results keeps pages full and
     // the hasMore flag honest.

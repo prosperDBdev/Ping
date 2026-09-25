@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class MessageReactionRulesTest {
 
-    private final MessageService service = new MessageService(null, null, null, null);
+    private final MessageService service = new MessageService(null, null, null, null, null);
 
     @Test
     @DisplayName("only the five offered reactions are accepted, checked before any database work")

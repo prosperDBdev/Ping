@@ -55,25 +55,37 @@ export async function requestSystemPermission(): Promise<SystemPermission> {
  * constructor". The service worker route works everywhere notifications do.
  *
  * `tag` is the conversation id, so a burst of messages in one chat replaces a
- * single notification instead of stacking twenty of them.
+ * single notification instead of stacking twenty of them. `renotify` makes
+ * each replacement alert again; without it the replacement is silent and
+ * never pops up on a phone (see the push handler in public/sw.js).
  */
 export async function showSystemNotification(
   title: string,
   body: string,
-  conversationId: string
+  conversationId: string,
+  messageId?: string
 ): Promise<void> {
   if (systemPermission() !== "granted") return;
 
-  const options: NotificationOptions = {
+  // renotify and vibrate are real, widely supported options that TypeScript's
+  // built-in NotificationOptions type doesn't list yet, hence the widening.
+  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body,
     tag: conversationId,
+    renotify: true,
+    silent: false,
+    vibrate: [200, 100, 200],
     icon: "/icons/icon-192.png",
-    data: { conversationId },
+    badge: "/icons/icon-192.png",
+    data: { conversationId, messageId },
   };
 
   try {
     const registration = await navigator.serviceWorker?.getRegistration();
     if (registration) {
+      // The push for this message may have beaten the open tab to it.
+      const shown = await registration.getNotifications({ tag: conversationId });
+      if (messageId && shown.some((n) => n.data?.messageId === messageId)) return;
       await registration.showNotification(title, options);
       return;
     }

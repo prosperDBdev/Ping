@@ -1,6 +1,15 @@
 "use client";
 
-import { apiErrorMessage, editMessage, reactToMessage } from "@/lib/messages";
+import {
+  apiErrorMessage,
+  DELETE_FOR_EVERYONE_MS,
+  DELETED_PREVIEW,
+  deleteForEveryone,
+  deleteForMe,
+  editMessage,
+  reactToMessage,
+} from "@/lib/messages";
+import Sheet from "@/components/common/Sheet";
 import useChatStore from "@/store/chatStore";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -39,6 +48,11 @@ export default function MessageBubble({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // The delete choices. `everyoneAllowed` is worked out when the dialog
+  // opens (it depends on the time), and is only a guide: the server checks
+  // the 48 hours again by its own clock.
+  const [deleteDialog, setDeleteDialog] = useState<{ everyoneAllowed: boolean } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isMine = message.senderId === user?.id;
   const pinned = isPinned(message.conversationId, message.id);
@@ -54,7 +68,8 @@ export default function MessageBubble({
     },
     []
   );
-  const canEdit = isMine && message.type === "TEXT";
+  const deleted = !!message.deletedAt;
+  const canEdit = isMine && message.type === "TEXT" && !deleted;
   const { quoted, body } = parseReplyQuote(message.content);
   const suggested = suggestActionsForMessage(body);
 
@@ -134,6 +149,113 @@ export default function MessageBubble({
     }
   };
 
+  const openDelete = () => {
+    setDeleteDialog({
+      everyoneAllowed:
+        isMine && !deleted && Date.now() - new Date(message.createdAt).getTime() < DELETE_FOR_EVERYONE_MS,
+    });
+  };
+
+  const handleDelete = async (scope: "everyone" | "me") => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const store = useChatStore.getState();
+      if (scope === "everyone") {
+        // The marker replaces the message here straight away; everyone with
+        // the chat open gets the same marker over the live connection.
+        store.addMessage(await deleteForEveryone(message.conversationId, message.id));
+        store.setLastMessagePreview(message.conversationId, message.createdAt, DELETED_PREVIEW);
+      } else {
+        await deleteForMe(message.conversationId, message.id);
+        store.removeMessage(message.id);
+      }
+      // A pin pointing at a message that's gone would be a dead link.
+      if (pinned) togglePin(message.conversationId, message.id, snippetFor(body), message.senderUsername, user?.id || "");
+      setDeleteDialog(null);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't delete that message"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteSheet = (
+    <Sheet open={!!deleteDialog} onClose={() => setDeleteDialog(null)} title="Delete message?" widthClass="sm:max-w-sm">
+      <div className="space-y-2">
+        {deleteDialog?.everyoneAllowed && (
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void handleDelete("everyone")}
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 transition"
+          >
+            Delete for everyone
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={() => void handleDelete("me")}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 dark:text-red-400 border border-red-500/40 hover:bg-red-500/10 disabled:opacity-50 transition"
+        >
+          Delete for me
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeleteDialog(null)}
+          className="w-full py-3 rounded-xl text-sm font-semibold text-ping-text-light dark:text-ping-night-text-light hover:bg-ping-cream-dark dark:hover:bg-ping-night-card-active transition"
+        >
+          Cancel
+        </button>
+        {isMine && !deleteDialog?.everyoneAllowed && !deleted && (
+          <p className="text-[11px] text-center text-ping-text-light dark:text-ping-night-text-light pt-1">
+            Messages can only be deleted for everyone within 48 hours of sending.
+          </p>
+        )}
+      </div>
+    </Sheet>
+  );
+
+  // Deleted for everyone: a marker where the message was, so the
+  // conversation doesn't silently rewrite itself. No reactions, replies or
+  // edits on it, only "Delete for me" to tidy it away.
+  if (deleted) {
+    return (
+      <div
+        id={`message-${message.id}`}
+        className={`group flex ${isMine ? "justify-end" : "justify-start"} mb-3 scroll-mt-6`}
+      >
+        <div className={`flex items-end gap-1 max-w-[78%] sm:max-w-[65%] ${isMine ? "flex-row-reverse" : "flex-row"}`}>
+          <div className="px-4 py-2.5 rounded-2xl border border-dashed border-ping-sand dark:border-ping-night-border bg-white/60 dark:bg-ping-night-card/60">
+            {!isMine && showSender && (
+              <p className="text-[11px] font-semibold text-ping-teal dark:text-ping-teal-light mb-0.5">
+                {message.senderUsername}
+              </p>
+            )}
+            <p className="text-sm italic text-ping-text-light dark:text-ping-night-text-light flex items-center gap-1.5">
+              <span aria-hidden>🚫</span>
+              {isMine ? "You deleted this message" : "This message was deleted"}
+            </p>
+            <p className={`text-[10px] font-medium text-ping-text-light dark:text-ping-night-text-light mt-0.5 ${isMine ? "text-right" : ""}`}>
+              {formatTime(message.createdAt)}
+            </p>
+          </div>
+          <button
+            onClick={openDelete}
+            aria-label="Delete message"
+            className="mb-1 w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full text-ping-text-light/60 dark:text-ping-night-text-light/60 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-ping-cream-dark dark:hover:bg-ping-night-card-active transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {deleteSheet}
+      </div>
+    );
+  }
+
   if (message.type === "SYSTEM") {
     return (
       <div className="flex justify-center my-3">
@@ -171,6 +293,7 @@ export default function MessageBubble({
           onSaveToMemory={() => onSaveToMemory(message)}
           onReact={handleReact}
           onEdit={canEdit ? startEdit : undefined}
+          onDelete={openDelete}
         />
 
         <div className={`flex items-end gap-1 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
@@ -342,7 +465,6 @@ export default function MessageBubble({
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         isPinned={pinned}
-        isMine={isMine}
         suggested={suggested}
         onReply={() => onReply(message)}
         onPin={handlePin}
@@ -352,7 +474,9 @@ export default function MessageBubble({
         onSaveToMemory={() => onSaveToMemory(message)}
         onReact={handleReact}
         onEdit={canEdit ? startEdit : undefined}
+        onDelete={openDelete}
       />
+      {deleteSheet}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.example.pingBackend;
 
+import java.util.TimeZone;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
@@ -26,6 +27,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @ConfigurationPropertiesScan
 @SpringBootApplication
 public class PingBackendApplication {
+
+	// Pin the JVM's clock to UTC before anything else runs, including under
+	// tests (the class loads there too). Every LocalDateTime.now() is then a
+	// UTC time on every machine: a laptop in Lagos and the server agree, and
+	// TimeConfig can label them all with "Z" truthfully. Without this, local
+	// development would run on the laptop's zone and be off by its offset.
+	static {
+		TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+	}
 
 	public static void main(String[] args) {
 		SpringApplication.run(PingBackendApplication.class, args);

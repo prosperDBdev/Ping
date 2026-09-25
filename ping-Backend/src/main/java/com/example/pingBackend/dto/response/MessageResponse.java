@@ -31,4 +31,6 @@ public class MessageResponse {
     private Map<String, String> reactions;
     /** Set once the message has been edited, so the app can say so. */
     private LocalDateTime editedAt;
+    /** Set when deleted for everyone: show a "This message was deleted" marker. */
+    private LocalDateTime deletedAt;
 }

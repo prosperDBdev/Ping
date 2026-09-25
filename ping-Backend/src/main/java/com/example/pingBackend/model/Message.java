@@ -59,6 +59,18 @@ public class Message {
     private LocalDateTime editedAt;
 
     /**
+     * Set when the sender deleted this message for everyone. The document
+     * stays (as a "This message was deleted" marker, so the conversation
+     * doesn't silently rewrite itself) but its text, attachment, reactions
+     * and quoted status are cleared.
+     */
+    private LocalDateTime deletedAt;
+
+    /** Users who chose "Delete for me": hidden from them, visible to everyone else. */
+    @Builder.Default
+    private List<String> hiddenFor = new ArrayList<>();
+
+    /**
      * Set when this message is a reply to someone's status.
      *
      * A SNAPSHOT, not a reference, and that's the point. The status this quotes
