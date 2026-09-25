@@ -1,5 +1,6 @@
 "use client";
 
+import { notificationsEnabled, requestSystemPermission, setNotificationsEnabled, systemPermission } from "@/lib/notifications";
 import { useRef, useState } from "react";
 import { AxiosError } from "axios";
 import BlockedUsersSection from "@/components/settings/BlockedUsersSection";
@@ -69,7 +70,20 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
   const [isEditing, setIsEditing] = useState(false);
   const [draftName, setDraftName] = useState(user?.username || "");
   const [draftNote, setDraftNote] = useState(user?.note || "Here for the good stuff");
-  const [notificationsOn, setNotificationsOn] = useState(true);
+  // This toggle used to be decoration: local state nothing ever read. Now it
+  // drives MessageNotifier. Per device, like the browser permission it pairs
+  // with (see lib/notifications).
+  const [notificationsOn, setNotificationsOn] = useState(() => notificationsEnabled());
+  const [permission, setPermission] = useState(() => systemPermission());
+
+  const toggleNotifications = () => {
+    const next = !notificationsOn;
+    setNotificationsOn(next);
+    setNotificationsEnabled(next);
+  };
+
+  // Called from a tap, which browsers require before they'll show the prompt.
+  const allowOnThisDevice = async () => setPermission(await requestSystemPermission());
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -301,7 +315,10 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
                 }
                 right={
                   <button
-                    onClick={() => setNotificationsOn((v) => !v)}
+                    onClick={toggleNotifications}
+                    role="switch"
+                    aria-checked={notificationsOn}
+                    aria-label="Message notifications"
                     className={`w-11 h-6 rounded-full flex-shrink-0 flex items-center transition px-0.5 ${
                       notificationsOn
                         ? "bg-ping-teal dark:bg-ping-teal-light justify-end"
@@ -333,6 +350,31 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
                 }
               />
             </div>
+            {notificationsOn && permission === "default" && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-ping-sand/60 dark:border-ping-night-border bg-white dark:bg-ping-night-card p-4">
+                <p className="text-xs text-ping-text-light dark:text-ping-night-text-light">
+                  Get notified when Ping isn&apos;t on screen.
+                </p>
+                <button
+                  onClick={allowOnThisDevice}
+                  className="px-3.5 py-2 rounded-xl bg-ping-dark text-white text-xs font-semibold hover:bg-ping-dark/90 transition flex-shrink-0"
+                >
+                  Allow on this device
+                </button>
+              </div>
+            )}
+            {notificationsOn && permission === "denied" && (
+              <p className="mt-3 px-1 text-xs text-ping-text-light dark:text-ping-night-text-light">
+                Notifications are blocked for Ping in this browser&apos;s site settings. You&apos;ll still get
+                pop-ups while Ping is open.
+              </p>
+            )}
+            {notificationsOn && permission === "unsupported" && (
+              <p className="mt-3 px-1 text-xs text-ping-text-light dark:text-ping-night-text-light">
+                This browser can&apos;t show system notifications. On an iPhone, add Ping to your Home Screen
+                first. You&apos;ll still get pop-ups while Ping is open.
+              </p>
+            )}
           </div>
 
           <InviteFriendsSection />

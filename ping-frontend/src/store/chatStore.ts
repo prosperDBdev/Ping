@@ -38,6 +38,14 @@ interface ChatState {
    */
   chatOnScreen: boolean;
   setChatOnScreen: (onScreen: boolean) => void;
+  /**
+   * A conversation someone asked to open from outside the Chats page: a
+   * message pop-up, a system notification, or a link. The Chats page picks it
+   * up and opens it, because only that page knows how to show a thread (on a
+   * phone, that means switching from the list to the conversation).
+   */
+  pendingOpenId: string | null;
+  requestOpenConversation: (conversationId: string | null) => void;
 }
 
 // Backoff for a conversation fetch that couldn't reach the server: 1s, 2s, 4s,
@@ -121,6 +129,10 @@ const useChatStore = create<ChatState>((set, get) => ({
   chatOnScreen: false,
 
   setChatOnScreen: (onScreen: boolean) => set({ chatOnScreen: onScreen }),
+
+  pendingOpenId: null,
+
+  requestOpenConversation: (conversationId: string | null) => set({ pendingOpenId: conversationId }),
 
   setActiveConversation: (conversation: Conversation) => {
     set((state) =>
@@ -273,7 +285,8 @@ const useChatStore = create<ChatState>((set, get) => ({
     } catch (err: unknown) {
       const error = err as AxiosError;
       throw new Error(
-        (error.response?.data as string) || "Failed to create conversation"
+        (error.response?.data as { message?: string } | undefined)?.message ||
+          "Failed to create conversation"
       );
     }
   },

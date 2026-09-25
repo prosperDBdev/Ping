@@ -1,3 +1,4 @@
+import MessageNotifier from "@/components/common/MessageNotifier";
 import RealtimeProvider from "@/components/common/RealtimeProvider";
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
@@ -74,7 +75,10 @@ export default function RootLayout({
       <body className="antialiased">
         <ServiceWorkerRegistrar />
         <ThemeProvider>
-          <RealtimeProvider>{children}</RealtimeProvider>
+          <RealtimeProvider>
+            {children}
+            <MessageNotifier />
+          </RealtimeProvider>
         </ThemeProvider>
       </body>
     </html>

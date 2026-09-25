@@ -17,6 +17,8 @@ interface ConversationInfoPanelProps {
   onJumpToSection: (section: WorkspaceSection) => void;
   /** Called after a member is removed, so the caller can refresh. */
   onMemberRemoved?: () => void;
+  /** Open (or create) a private chat with a member, from "Message @name". */
+  onMessageMember?: (member: User) => void;
 }
 
 export default function ConversationInfoPanel({
@@ -24,7 +26,10 @@ export default function ConversationInfoPanel({
   onClose,
   onJumpToSection,
   onMemberRemoved,
+  onMessageMember,
 }: ConversationInfoPanelProps) {
+  // Which member's "Message @name" menu is open, if any.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const { user: currentUser } = useAuthStore();
   const [removingMember, setRemovingMember] = useState<User | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -170,7 +175,8 @@ export default function ConversationInfoPanel({
         </p>
         <div className="space-y-3">
           {conversation.participants.map((p) => (
-            <div key={p.id} className="flex items-center gap-3">
+            <div key={p.id}>
+            <div className="flex items-center gap-3">
               <div className="relative flex-shrink-0">
                 <Avatar
                   username={p.username}
@@ -183,10 +189,17 @@ export default function ConversationInfoPanel({
                   <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ping-green rounded-full border-2 border-ping-cream dark:border-ping-night-surface" />
                 )}
               </div>
-              <p className="text-sm font-medium text-ping-dark dark:text-ping-night-text truncate flex-1">
+              {/* Tap someone else's name for "Message @name", as in WhatsApp. */}
+              <button
+                type="button"
+                disabled={p.id === currentUser?.id || !onMessageMember}
+                onClick={() => setMenuFor((open) => (open === p.id ? null : p.id))}
+                aria-expanded={menuFor === p.id}
+                className="text-left text-sm font-medium text-ping-dark dark:text-ping-night-text truncate flex-1 enabled:hover:text-ping-teal dark:enabled:hover:text-ping-teal-light transition"
+              >
                 {p.username}
                 {p.id === currentUser?.id ? " (you)" : ""}
-              </p>
+              </button>
               {conversation.admin === p.id && (
                 <span className="text-[9px] font-bold uppercase tracking-wide text-ping-teal dark:text-ping-teal-light bg-ping-sage dark:bg-ping-night-sage px-2 py-0.5 rounded-full flex-shrink-0">
                   Admin
@@ -206,6 +219,24 @@ export default function ConversationInfoPanel({
                   </svg>
                 </button>
               )}
+            </div>
+            {menuFor === p.id && onMessageMember && (
+              <div className="ml-11 mt-1.5 rounded-xl border border-ping-sand/60 dark:border-ping-night-border bg-white dark:bg-ping-night-card shadow-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuFor(null);
+                    onMessageMember(p);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-ping-dark dark:text-ping-night-text hover:bg-ping-cream dark:hover:bg-ping-night-card-active transition"
+                >
+                  <svg className="w-4 h-4 text-ping-teal dark:text-ping-teal-light" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                  </svg>
+                  Message @{p.username}
+                </button>
+              </div>
+            )}
             </div>
           ))}
         </div>

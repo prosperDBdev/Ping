@@ -44,6 +44,7 @@ export default function useWebSocket() {
   const tempResponseCallbackRef = useRef<((event: TemporaryChatResponseEvent) => void) | null>(null);
   const removedFromConversationCallbackRef =
     useRef<((event: { conversationId: string; removedBy: string }) => void) | null>(null);
+  const incomingMessageCallbackRef = useRef<((message: Message) => void) | null>(null);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -101,6 +102,8 @@ export default function useWebSocket() {
       const inboxSub = client.subscribe(`/topic/user/${user.id}/inbox`, (frame) => {
         const message: Message = JSON.parse(frame.body);
         updateConversationLastMessage(message.conversationId, message);
+        // Then let the notifier decide whether it's worth a pop-up.
+        incomingMessageCallbackRef.current?.(message);
       });
       subscriptionsRef.current.set("inbox", inboxSub);
 
@@ -307,6 +310,11 @@ export default function useWebSocket() {
     []
   );
 
+  // Every incoming message, from any conversation (see MessageNotifier).
+  const onIncomingMessage = useCallback((callback: (message: Message) => void) => {
+    incomingMessageCallbackRef.current = callback;
+  }, []);
+
   return {
     // Exposed so the UI can reflect connection state up front, rather than
     // only discovering there's no socket at the moment someone hits send.
@@ -320,5 +328,6 @@ export default function useWebSocket() {
     onTemporaryChatInvite,
     onTemporaryChatResponse,
     onRemovedFromConversation,
+    onIncomingMessage,
   };
 }

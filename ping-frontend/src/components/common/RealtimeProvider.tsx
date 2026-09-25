@@ -38,6 +38,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
     onTemporaryChatInvite,
     onTemporaryChatResponse,
     onRemovedFromConversation,
+    onIncomingMessage,
   } = useWebSocket();
 
   // Every function here is stable (useCallback inside the hook), so the value
@@ -55,6 +56,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       onTemporaryChatInvite,
       onTemporaryChatResponse,
       onRemovedFromConversation,
+      onIncomingMessage,
     }),
     [
       isConnected,
@@ -67,6 +69,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       onTemporaryChatInvite,
       onTemporaryChatResponse,
       onRemovedFromConversation,
+      onIncomingMessage,
     ]
   );
 

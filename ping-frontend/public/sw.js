@@ -44,6 +44,26 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Tapping a message notification: bring Ping forward and open that chat.
+// An already-open tab is reused and told which conversation to show; with no
+// tab open, a new one opens straight into it via /chat?open=<id>.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const conversationId = event.notification.data && event.notification.data.conversationId;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const existing = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (existing) {
+        existing.postMessage({ type: "open-conversation", conversationId });
+        return existing.focus();
+      }
+      const target = conversationId ? "/chat?open=" + encodeURIComponent(conversationId) : "/chat";
+      return self.clients.openWindow(target);
+    })
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 

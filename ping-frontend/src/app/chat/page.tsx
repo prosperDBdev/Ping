@@ -34,7 +34,7 @@ import {
 } from "@/types";
 import TemporaryChatInvitePrompt from "@/components/temporary/TemporaryChatInvitePrompt";
 import { fetchPendingTemporaryChatInvites } from "@/lib/temporaryChat";
-import { fetchBlockedUsers } from "@/lib/moderation";
+import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
 import toast, { Toaster } from "react-hot-toast";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
@@ -155,6 +155,57 @@ export default function ChatPage() {
         (p) => p.id !== user?.id && blockedUserIds.includes(p.id)
       )
   );
+
+  // ---- First contact -----------------------------------------------------
+  // Someone you've never talked to has messaged you: they've written and you
+  // haven't. Like WhatsApp's "not in your contacts" prompt, show who they are
+  // in relation to you (the groups you share) and offer Block or Continue.
+  // Shared groups come from the groups you're already in, so nobody learns
+  // about a group they're not part of.
+  const [dismissedFirstContact, setDismissedFirstContact] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("ping-first-contact-ok") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const otherParticipant =
+    activeConversation?.type === "PRIVATE"
+      ? activeConversation.participants.find((p) => p.id !== user?.id)
+      : undefined;
+  const isFirstContact =
+    !!activeConversation &&
+    !!otherParticipant &&
+    !isLoadingMessages &&
+    !isActiveConversationBlocked &&
+    !dismissedFirstContact.includes(activeConversation.id) &&
+    messages.some((m) => m.senderId === otherParticipant.id) &&
+    !messages.some((m) => m.senderId === user?.id);
+  const sharedGroups = otherParticipant
+    ? conversations
+        .filter((c) => c.type === "GROUP" && c.participants.some((p) => p.id === otherParticipant.id))
+        .map((c) => c.name ?? "a group")
+    : [];
+
+  const continueFirstContact = (conversationId: string) => {
+    const next = [...dismissedFirstContact, conversationId];
+    setDismissedFirstContact(next);
+    try {
+      localStorage.setItem("ping-first-contact-ok", JSON.stringify(next));
+    } catch {
+      // Storage blocked: it just asks again next visit.
+    }
+  };
+
+  const blockFirstContact = async (userId: string) => {
+    try {
+      await blockUser(userId);
+      refreshBlockedUsers();
+      toast.success("Blocked. They can't message you any more.");
+    } catch {
+      toast.error("Couldn't block them just now. Please try again.");
+    }
+  };
 
   // Tell the shared connection whether a chat is really on screen (see
   // chatOnScreen in the chat store). A flag rather than clearing the open
@@ -299,6 +350,38 @@ export default function ChatPage() {
     setShowMobileChat(false);
     clearChat();
   }, [clearChat]);
+
+  // Open a conversation asked for from elsewhere (see pendingOpenId in the
+  // chat store), or from a link like /chat?open=<id> that a system
+  // notification opens. If the conversation list hasn't loaded yet, the store
+  // subscription tries again as soon as it has.
+  useEffect(() => {
+    const openIfReady = () => {
+      const { pendingOpenId, conversations: loaded, requestOpenConversation } = useChatStore.getState();
+      if (!pendingOpenId) return;
+      const conversation = loaded.find((c) => c.id === pendingOpenId);
+      if (!conversation) return;
+      requestOpenConversation(null);
+      handleSelectConversation(conversation);
+    };
+    const fromLink = new URLSearchParams(window.location.search).get("open");
+    if (fromLink) useChatStore.getState().requestOpenConversation(fromLink);
+    queueMicrotask(openIfReady);
+    return useChatStore.subscribe(openIfReady);
+  }, [handleSelectConversation]);
+
+  // Tap a member in a group's info panel, then "Message @name".
+  const handleMessageMember = useCallback(
+    async (member: { id: string }) => {
+      try {
+        const conversation = await useChatStore.getState().createPrivateConversation(member.id);
+        handleConversationCreated(conversation);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Couldn't open that chat");
+      }
+    },
+    [handleConversationCreated]
+  );
 
   const handleSendMessage = useCallback(
     (content: string): boolean => {
@@ -803,6 +886,35 @@ export default function ChatPage() {
                             </div>
                           )}
 
+                          {isFirstContact && otherParticipant && (
+                            <div className="mx-auto my-4 max-w-md rounded-2xl border border-ping-sand/60 dark:border-ping-night-border bg-white dark:bg-ping-night-card p-4 text-center">
+                              <p className="text-sm font-semibold text-ping-dark dark:text-ping-night-text">
+                                @{otherParticipant.username} hasn&apos;t chatted with you before
+                              </p>
+                              <p className="text-xs text-ping-text-light dark:text-ping-night-text-light mt-1">
+                                {sharedGroups.length === 0
+                                  ? "You're not in any groups together."
+                                  : `You're both in ${sharedGroups.slice(0, 3).join(", ")}${
+                                      sharedGroups.length > 3 ? ` and ${sharedGroups.length - 3} more` : ""
+                                    }.`}
+                              </p>
+                              <div className="flex gap-2 justify-center mt-3">
+                                <button
+                                  onClick={() => blockFirstContact(otherParticipant.id)}
+                                  className="px-4 py-2 rounded-xl border border-red-500/40 text-red-500 text-xs font-semibold hover:bg-red-500/10 transition"
+                                >
+                                  Block
+                                </button>
+                                <button
+                                  onClick={() => continueFirstContact(activeConversation.id)}
+                                  className="px-4 py-2 rounded-xl bg-ping-dark text-white text-xs font-semibold hover:bg-ping-dark/90 transition"
+                                >
+                                  Continue
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {isLoadingMessages ? (
                             <div className="flex items-center justify-center h-full">
                               <div className="w-6 h-6 border-2 border-ping-sand dark:border-ping-night-border border-t-ping-teal rounded-full animate-spin" />
@@ -875,6 +987,7 @@ export default function ChatPage() {
                       onClose={() => setIsInfoOpen(false)}
                       onJumpToSection={setWorkspaceSection}
                       onMemberRemoved={() => fetchConversations()}
+                      onMessageMember={handleMessageMember}
                     />
                   )}
                 </>
