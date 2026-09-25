@@ -1,6 +1,7 @@
 package com.example.pingBackend.controller;
 
 import com.example.pingBackend.dto.request.ForgotPasswordRequest;
+import com.example.pingBackend.dto.request.LoginCodeRequest;
 import com.example.pingBackend.dto.request.LoginRequest;
 import com.example.pingBackend.dto.request.RegisterRequest;
 import com.example.pingBackend.dto.request.ResetPasswordRequest;
@@ -32,15 +33,36 @@ public class AuthController {
     private final AppInviteService appInviteService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        AuthResponse response = authService.register(request);
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        AuthResponse response = authService.register(request, userAgent(http));
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Either signs you in, or (with two-step verification on) answers with
+     * twoFactorRequired and a challenge: then POST the emailed code to
+     * /login/verify.
+     */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-        AuthResponse response = authService.login(request, clientIp(http));
+        AuthResponse response = authService.login(request, clientIp(http), userAgent(http));
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/login/verify")
+    public AuthResponse verifyLoginCode(@Valid @RequestBody LoginCodeRequest request, HttpServletRequest http) {
+        return authService.verifyLoginCode(request.getChallenge(), request.getCode(), clientIp(http), userAgent(http));
+    }
+
+    @PostMapping("/login/resend")
+    public ResponseEntity<Void> resendLoginCode(@Valid @RequestBody LoginCodeRequest.Resend request) {
+        authService.resendLoginCode(request.getChallenge());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** For naming the device in the device list. Display only; never trusted. */
+    private static String userAgent(HttpServletRequest request) {
+        return request.getHeader("User-Agent");
     }
 
     /**

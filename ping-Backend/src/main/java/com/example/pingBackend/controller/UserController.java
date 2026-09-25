@@ -36,6 +36,7 @@ public class UserController {
         // else goes through mapToResponse, which leaves it out.
         UserResponse self = mapToResponse(user);
         self.setEmail(user.getEmail());
+        self.setTwoFactorEnabled(user.hasTwoFactor());
         return ResponseEntity.ok(self);
     }
 

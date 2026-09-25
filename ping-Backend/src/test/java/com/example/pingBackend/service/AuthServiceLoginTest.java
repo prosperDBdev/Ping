@@ -3,7 +3,7 @@ package com.example.pingBackend.service;
 import com.example.pingBackend.dto.request.LoginRequest;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.UserRepository;
-import com.example.pingBackend.security.JwtTokenProvider;
+import com.example.pingBackend.dto.response.AuthResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,13 +38,17 @@ class AuthServiceLoginTest {
     private static final String IP_B = "203.0.113.2";
 
     private AuthService auth;
+    private FakeSessions sessions;
+    private final List<String> codesSentTo = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(4);
         User maya = User.builder().id("maya-id").username("maya").email("maya@x.com")
                 .password(encoder.encode("correct-horse")).build();
-        Map<String, User> byUsername = Map.of("maya", maya);
+        User theo = User.builder().id("theo-id").username("theo").email("theo@x.com")
+                .password(encoder.encode("correct-horse")).twoFactorEnabled(true).build();
+        Map<String, User> byUsername = Map.of("maya", maya, "theo", theo);
 
         UserRepository repo = (UserRepository) Proxy.newProxyInstance(
                 UserRepository.class.getClassLoader(), new Class<?>[]{UserRepository.class},
@@ -55,11 +59,18 @@ class AuthServiceLoginTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
 
-        JwtTokenProvider jwt = new JwtTokenProvider(
-                "test-only-signing-key-not-used-anywhere-real-0123456789abcdef", 86_400_000);
+        // Records who was sent a code, instead of emailing anyone.
+        LoginCodeService codes = new LoginCodeService(null, null, new RateLimiter(), FakeSessions.SIGNING_KEY) {
+            @Override
+            public Issued issue(User user, Purpose purpose) {
+                codesSentTo.add(user.getId());
+                return new Issued("pending-challenge", "t•••@x.com");
+            }
+        };
+        sessions = new FakeSessions();
 
         // Sign-in never touches invites, so the invite service isn't needed.
-        auth = new AuthService(repo, encoder, jwt, new RateLimiter(), null);
+        auth = new AuthService(repo, encoder, new RateLimiter(), null, sessions, codes);
         auth.createDummyHash();
     }
 
@@ -67,7 +78,41 @@ class AuthServiceLoginTest {
         LoginRequest request = new LoginRequest();
         request.setUsername(username);
         request.setPassword(password);
-        auth.login(request, ip);
+        auth.login(request, ip, "test");
+    }
+
+    private AuthResponse signIn(String username) {
+        LoginRequest request = new LoginRequest();
+        request.setUsername(username);
+        request.setPassword("correct-horse");
+        return auth.login(request, IP_A, "test");
+    }
+
+    @Test
+    @DisplayName("without two-step verification, the right password signs you in on a new session")
+    void plainSignInIssuesASession() {
+        AuthResponse response = signIn("maya");
+        assertEquals(true, response.getToken() != null);
+        assertEquals(List.of("PASSWORD"), sessions.methods);
+        assertEquals(List.of(), codesSentTo);
+    }
+
+    @Test
+    @DisplayName("with two-step verification, the right password alone gets a code emailed and NO token")
+    void twoFactorWithholdsTheToken() {
+        AuthResponse response = signIn("theo");
+        assertEquals(null, response.getToken());
+        assertEquals(true, response.getTwoFactorRequired());
+        assertEquals("pending-challenge", response.getChallenge());
+        assertEquals(List.of("theo-id"), codesSentTo);
+        assertEquals(List.of(), sessions.methods, "no session may exist before the code is entered");
+    }
+
+    @Test
+    @DisplayName("a wrong password never sends a code, even with two-step verification on")
+    void wrongPasswordSendsNoCode() {
+        assertThrows(InvalidCredentialsException.class, () -> attempt("theo", "nope", IP_A));
+        assertEquals(List.of(), codesSentTo);
     }
 
     @Test

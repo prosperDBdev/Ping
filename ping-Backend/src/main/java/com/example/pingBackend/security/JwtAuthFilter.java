@@ -41,11 +41,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            tokenAuthenticator.authenticate(authHeader.substring(7)).ifPresent(user -> {
+            tokenAuthenticator.authenticateSession(authHeader.substring(7)).ifPresent(signedIn -> {
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(user, null, Collections.emptyList());
+                        new UsernamePasswordAuthenticationToken(signedIn.user(), null, Collections.emptyList());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                // Which device this request came from, for "this device" in
+                // the device list and for signing out just this one.
+                request.setAttribute(CurrentSession.ATTRIBUTE, signedIn.sessionId());
             });
         }
 

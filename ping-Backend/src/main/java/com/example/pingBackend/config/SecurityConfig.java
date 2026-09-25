@@ -76,6 +76,7 @@ public class SecurityConfig {
                         // PUBLIC endpoints — no token needed
                         .requestMatchers("/api/auth/**").permitAll()     // Register, Login
                         .requestMatchers("/ws/**").permitAll()            // WebSocket
+                        .requestMatchers("/ws-pair").permitAll()          // QR sign-in socket (no account yet)
                         .requestMatchers("/api/health").permitAll()       // Health check
 
                         // EVERYTHING else — token required

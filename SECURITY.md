@@ -7,7 +7,7 @@ This document is for security researchers and penetration testers. It covers how
 to report a problem, what may be tested and how, the controls already in place,
 and the limitations that are already known.
 
-*Last reviewed: 25 September 2026.*
+*Last reviewed: 25 September 2026 (Stages 13 and 14).*
 
 ---
 
@@ -118,8 +118,18 @@ Browser --HTTPS--> nginx (only public entry point; TLS ends here)
 
 - JWT (HS256) with a 24-hour expiry. The signing secret comes only from the
   environment, and the app refuses to start without one.
-- Tokens issued before the user's last password change are rejected, so a
-  password reset signs every device out.
+- **Every token belongs to a server-side session** (one per signed-in device,
+  in the `sessions` collection), named in the token's `sid` claim. A token
+  is accepted only while its session exists, and the user is taken from the
+  session rather than from the token's subject. Tokens without a session are
+  refused.
+- **Signing out is real.** "Log out" deletes the session on the server. Users
+  can see every signed-in device (Settings → Linked devices) and sign any of
+  them out. Signing a device out also closes its open WebSocket connections
+  immediately, so it stops receiving messages at once, not at its next
+  reconnect.
+- Tokens issued before the user's last password change are rejected, and a
+  password reset deletes every session, so it signs every device out.
 - Passwords are hashed with BCrypt.
 - Login failures return the same message for an unknown user as for a wrong
   password. A dummy hash is checked for unknown users, so response timing
@@ -135,10 +145,46 @@ Browser --HTTPS--> nginx (only public entry point; TLS ends here)
 | Feedback | 5 per user per hour |
 | Invite link preview (public) | 30 per IP per 10 min |
 | New invite link | 10 per user per hour |
+| Emailed sign-in codes | 6 per user per hour; 3 emails per code, 30 s apart |
+| Entering a sign-in code | 5 wrong guesses per code; 30 per IP per 15 min |
+| Turning two-step verification off (password check) | 5 per user per 15 min |
+| QR sign-in codes | 30 per IP per 10 min |
+| QR approval and lookup | 30 per user per 10 min |
 
 Behind nginx the real client IP comes from `X-Forwarded-For`. It's trusted only
 when the connection comes from an internal proxy address, so a client can't
 forge a new IP per request.
+
+### Two-step verification (optional)
+
+- When a user turns it on, a correct password returns **no token**: only a
+  challenge (256 random bits) and a masked email address. A 6-digit code is
+  emailed, and a session is created only when it is entered.
+- Codes come from `SecureRandom`, expire after 10 minutes, and are single use
+  (removed atomically on success). The attempt is counted atomically *before*
+  the code is compared, and the code is destroyed after 5 wrong guesses.
+  Comparison is constant-time.
+- Codes are stored as an HMAC keyed with a secret derived from the server's
+  signing key and bound to their challenge, so a copy of the database can't be
+  brute-forced offline. Challenges are stored as SHA-256 hashes.
+- At most 3 emails per challenge, 30 seconds apart, and 6 challenges per user
+  per hour, so knowing someone's password can't be used to flood their inbox.
+- Turning it on requires entering an emailed code first (proving the inbox
+  works). Turning it off requires the password.
+
+### QR sign-in
+
+- A computer opens a plain WebSocket at `/ws-pair` (origin-checked, 30 per
+  IP per 10 minutes, at most 1,000 waiting codes) and receives a code of 256
+  random bits, valid for 2 minutes and single use. The QR code is a link with
+  the code after `#`, which browsers never send to a server, and the phone
+  sends it back in a request body, never a URL, so it doesn't reach logs.
+- Only a signed-in user can look up or approve a code. Approval creates a
+  session for the approver, named after the computer, and delivers its token
+  down that computer's socket. Nothing the computer sends is trusted.
+- **QRLjacking** (being tricked into scanning an attacker's code) is mitigated
+  by the approval screen, which names the device asking and warns plainly not
+  to approve a code someone sent you. It can't be prevented technically.
 
 ### Password reset
 
@@ -265,9 +311,9 @@ owner if you find a way one of them is worse than described.
    Content-Security-Policy is set yet to limit the impact of one.
 2. **No security headers yet:** no CSP, `X-Frame-Options`/`frame-ancestors`,
    `Referrer-Policy` or `Permissions-Policy`. Clickjacking is therefore possible.
-3. **There's no server-side logout.** A token stays valid until it expires (24
-   hours) unless the user changes their password. A single stolen token can't be
-   revoked on its own.
+3. **Pending QR sign-in codes live in server memory,** like the rate limits:
+   a restart discards them (the computer simply shows a new code), and they
+   assume a single server instance.
 4. **Registration reveals whether a username or email is taken** (a 409 response),
    and **registration and search aren't rate limited,** so both allow account
    enumeration, and registration allows bulk sign-ups.
@@ -279,7 +325,10 @@ owner if you find a way one of them is worse than described.
    because avatars appear in search results and member lists.
 8. **The application connects to MongoDB as its root user** rather than a
    least-privilege account.
-9. No multi-factor authentication.
+9. **Two-step verification is optional, off by default, and email-based.** It
+   is only as strong as the user's email account, and there are no backup
+   codes: losing access to the inbox means a password reset (which also uses
+   email).
 10. `GET /api/memories` isn't implemented and returns a generic 500 with an error ID.
 11. **Requests refused by Spring Security's firewall** (for example, URLs with an
     encoded `/`) get the servlet container's default HTML error page rather than

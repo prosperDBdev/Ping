@@ -6,6 +6,7 @@ import { createStompClient, disconnectStomp } from "@/lib/stompClient";
 import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
 import { DELETED_PREVIEW } from "@/lib/messages";
+import api from "@/lib/api";
 import {
   Conversation,
   Message,
@@ -130,6 +131,12 @@ export default function useWebSocket() {
 
     client.onStompError = (frame) => {
       console.error("[WS] Error:", frame.headers["message"]);
+      // Refused at CONNECT: this device was probably signed out from another
+      // one. Any REST call now answers 401, and the api client's handler
+      // takes it from there (back to the sign-in page).
+      if (String(frame.headers["message"] ?? "").includes("Unauthorized")) {
+        void api.get("/users/me").catch(() => {});
+      }
     };
 
     client.activate();

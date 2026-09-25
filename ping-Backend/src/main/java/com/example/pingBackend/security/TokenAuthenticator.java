@@ -1,7 +1,9 @@
 package com.example.pingBackend.security;
 
+import com.example.pingBackend.model.LoginSession;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.UserRepository;
+import com.example.pingBackend.service.SessionService;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -24,8 +26,14 @@ import java.util.Optional;
  *
  * A token is accepted only if ALL of these hold:
  *   1. the signature is valid and it hasn't expired
- *   2. the user it names still exists
- *   3. it was issued AFTER that user's password last changed
+ *   2. the signed-in device (session) it names still exists (Stage 14)
+ *   3. the user that session belongs to still exists
+ *   4. it was issued AFTER that user's password last changed
+ *
+ * Rule 2 is what makes "sign out this device" real. Deleting the session
+ * document stops its token at the very next request, anywhere in the world.
+ * Tokens from before sessions existed carry no session id and are refused, so
+ * everyone signed in back then signs in once more.
  *
  * Rule 3 is what makes "reset your password" also mean "log out everywhere".
  * Login tokens are stateless — the server keeps no list of them, so it can't
@@ -39,8 +47,17 @@ public class TokenAuthenticator {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
+    private final SessionService sessionService;
+
+    /** Who a token belongs to, and which of their signed-in devices it came from. */
+    public record Authenticated(User user, String sessionId) {
+    }
 
     public Optional<User> authenticate(String token) {
+        return authenticateSession(token).map(Authenticated::user);
+    }
+
+    public Optional<Authenticated> authenticateSession(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
@@ -50,9 +67,20 @@ public class TokenAuthenticator {
             return Optional.empty();
         }
 
+        String sessionId = claims.get().get(JwtTokenProvider.SESSION_CLAIM, String.class);
+        Optional<LoginSession> session = sessionService.findActive(sessionId);
+        if (session.isEmpty()) {
+            return Optional.empty();
+        }
+
+        // The user comes from the SESSION, not the token's subject: the session
+        // was written by the server at sign-in, so it's the authority on whose
+        // device this is.
         Date issuedAt = claims.get().getIssuedAt();
-        return userRepository.findByUsername(claims.get().getSubject())
-                .filter(user -> issuedAfterPasswordChange(user, issuedAt));
+        Optional<User> user = userRepository.findById(session.get().getUserId())
+                .filter(u -> issuedAfterPasswordChange(u, issuedAt));
+        user.ifPresent(u -> sessionService.touch(session.get()));
+        return user.map(u -> new Authenticated(u, sessionId));
     }
 
     /**

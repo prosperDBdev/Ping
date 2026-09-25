@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import useAuthStore from "@/store/authStore";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { INVITE_CODE_SHAPE, previewInvite } from "@/lib/invites";
 
 export default function RegisterPage() {
@@ -62,7 +62,6 @@ export default function RegisterPage() {
 
   return (
     <>
-      <Toaster position="top-center" />
       <AuthSplitLayout
         eyebrow="Start something good"
         titleLines={[

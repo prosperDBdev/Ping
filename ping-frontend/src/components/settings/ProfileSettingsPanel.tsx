@@ -8,6 +8,8 @@ import BlockedUsersSection from "@/components/settings/BlockedUsersSection";
 import StatusPrivacySection from "@/components/settings/StatusPrivacySection";
 import FeedbackSheet from "@/components/settings/FeedbackSheet";
 import InviteFriendsSection from "@/components/settings/InviteFriendsSection";
+import DevicesSection from "@/components/settings/DevicesSection";
+import TwoFactorSection from "@/components/settings/TwoFactorSection";
 import Avatar from "@/components/common/Avatar";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import {
@@ -349,8 +351,9 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
               />
               <SettingsRow
                 label="Security"
-                description="Password & sessions"
+                description="Linked devices & two-step verification"
                 right={chevron}
+                onClick={() => document.getElementById("security")?.scrollIntoView({ behavior: "smooth" })}
                 icon={
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
@@ -404,6 +407,14 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
                 }
               />
             </div>
+          </div>
+
+          <div id="security" className="space-y-4 scroll-mt-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light">
+              Security
+            </p>
+            <DevicesSection />
+            <TwoFactorSection />
           </div>
 
           <BlockedUsersSection />

@@ -3,7 +3,6 @@ package com.example.pingBackend.service;
 import com.example.pingBackend.dto.request.RegisterRequest;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.UserRepository;
-import com.example.pingBackend.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,9 +55,7 @@ class AuthServiceRegisterInviteTest {
             }
         };
 
-        JwtTokenProvider jwt = new JwtTokenProvider(
-                "test-only-signing-key-not-used-anywhere-real-0123456789abcdef", 86_400_000);
-        auth = new AuthService(repo, new BCryptPasswordEncoder(4), jwt, new RateLimiter(), invites);
+        auth = new AuthService(repo, new BCryptPasswordEncoder(4), new RateLimiter(), invites, new FakeSessions(), null);
     }
 
     private static RegisterRequest request(String inviteCode) {
@@ -73,21 +70,21 @@ class AuthServiceRegisterInviteTest {
     @Test
     @DisplayName("signing up through a live invite records who invited you")
     void liveInviteIsAttributed() {
-        auth.register(request(GOOD_CODE));
+        auth.register(request(GOOD_CODE), "test");
         assertEquals("maya-id", saved.get(0).getInvitedBy());
     }
 
     @Test
     @DisplayName("an expired or unknown invite still lets you sign up, just without attribution")
     void deadInviteStillRegisters() {
-        assertDoesNotThrow(() -> auth.register(request("ZZZZZZZZZZZZZZZZZZZZZZ")));
+        assertDoesNotThrow(() -> auth.register(request("ZZZZZZZZZZZZZZZZZZZZZZ"), "test"));
         assertNull(saved.get(0).getInvitedBy());
     }
 
     @Test
     @DisplayName("signing up with no invite at all works as it always did")
     void noInvite() {
-        auth.register(request(null));
+        auth.register(request(null), "test");
         assertNull(saved.get(0).getInvitedBy());
     }
 }

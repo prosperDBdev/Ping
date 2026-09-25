@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AxiosError } from "axios";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import api from "@/lib/api";
 
@@ -72,7 +72,6 @@ function ResetPasswordForm() {
 
   return (
     <>
-      <Toaster position="top-center" />
       <AuthSplitLayout
         eyebrow="Almost there"
         titleLines={[{ text: "A fresh" }, { text: "start", accent: true }, { text: "for your space." }]}

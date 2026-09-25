@@ -11,11 +11,29 @@ interface User {
   avatarUrl: string | null;
   status: string;
   note?: string | null;
+  /** Only ever present for your own account (from /users/me). */
+  twoFactorEnabled?: boolean;
 }
 
 interface ApiError {
   message?: string;
 }
+
+/** What the server sends when a sign-in is complete. */
+export interface SignedIn {
+  token: string;
+  id: string;
+  username: string;
+  email: string;
+}
+
+/**
+ * The result of the password step. With two-step verification on, there's no
+ * token yet: a code was emailed and has to be entered (verifyLoginCode).
+ */
+export type LoginResult =
+  | { done: true }
+  | { done: false; challenge: string; emailHint: string };
 
 interface AuthState {
   token: string | null;
@@ -25,11 +43,15 @@ interface AuthState {
   error: string | null;
 
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  /** Second step of a two-step sign-in: the 6-digit code from the email. */
+  verifyLoginCode: (challenge: string, code: string) => Promise<void>;
+  /** Finish any kind of sign-in (password, code, QR) with the server's answer. */
+  completeSignIn: (data: SignedIn) => void;
   logout: () => void;
   clearError: () => void;
   fetchCurrentUser: () => Promise<void>;
-  updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null }) => void;
+  updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null; twoFactorEnabled?: boolean }) => void;
 }
 
 const useAuthStore = create<AuthState>()(
@@ -52,16 +74,7 @@ const useAuthStore = create<AuthState>()(
             ...(inviteCode ? { inviteCode } : {}),
           });
 
-          const { token, id, username: name, email: mail } = res.data;
-
-          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-          set({
-            token,
-            user: { id, username: name, email: mail, avatarUrl: null, status: "ONLINE" },
-            isAuthenticated: true,
-            isLoading: false,
-          });
+          get().completeSignIn(res.data as SignedIn);
         } catch (err: unknown) {
           const error = err as AxiosError<ApiError>;
           const message =
@@ -80,16 +93,12 @@ const useAuthStore = create<AuthState>()(
             password,
           });
 
-          const { token, id, username, email: mail } = res.data;
-
-          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-          set({
-            token,
-            user: { id, username, email: mail, avatarUrl: null, status: "ONLINE" },
-            isAuthenticated: true,
-            isLoading: false,
-          });
+          if (res.data.twoFactorRequired) {
+            set({ isLoading: false });
+            return { done: false, challenge: res.data.challenge, emailHint: res.data.emailHint };
+          }
+          get().completeSignIn(res.data as SignedIn);
+          return { done: true };
         } catch (err: unknown) {
           const error = err as AxiosError<ApiError>;
           const message =
@@ -100,12 +109,49 @@ const useAuthStore = create<AuthState>()(
         }
       },
 
+      verifyLoginCode: async (challenge: string, code: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const res = await api.post("/auth/login/verify", { challenge, code });
+          get().completeSignIn(res.data as SignedIn);
+        } catch (err: unknown) {
+          const error = err as AxiosError<ApiError>;
+          const message = error.response?.data?.message || "That code didn't work";
+          set({ isLoading: false });
+          // 410 means this pending sign-in is over (expired, used, or too many
+          // wrong codes): the page goes back to the password step.
+          throw Object.assign(new Error(message), { expired: error.response?.status === 410 });
+        }
+      },
+
+      completeSignIn: ({ token, id, username, email }: SignedIn) => {
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        set({
+          token,
+          user: { id, username, email, avatarUrl: null, status: "ONLINE" },
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      },
+
       logout: () => {
         // Stop pushes to this device for this account, so the next person to
         // sign in here doesn't receive the last person's messages. The token
         // is passed explicitly because the header is removed straight after.
+        //
+        // THEN end this device's session on the server (Stage 14), so the
+        // token is dead everywhere, not just forgotten by this browser. In that
+        // order: once the session is gone the token can't remove the push
+        // subscription any more.
         const token = get().token;
-        if (token) void removePushSubscription(token).catch(() => {});
+        if (token) {
+          void (async () => {
+            await removePushSubscription(token).catch(() => {});
+            await api
+              .delete("/sessions/current", { headers: { Authorization: `Bearer ${token}` } })
+              .catch(() => {});
+          })();
+        }
         delete api.defaults.headers.common["Authorization"];
         set({
           token: null,
@@ -116,7 +162,7 @@ const useAuthStore = create<AuthState>()(
 
       clearError: () => set({ error: null }),
 
-      updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null }) => {
+      updateProfile: (fields: { username?: string; note?: string; avatarUrl?: string | null; twoFactorEnabled?: boolean }) => {
         set((state) => ({
           user: state.user ? { ...state.user, ...fields } : state.user,
         }));

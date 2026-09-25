@@ -49,5 +49,42 @@ public class AuthIndexConfig {
             log.error("Failed to create password reset indexes — resets still work, "
                     + "but expired tokens will not be cleaned up automatically", e);
         }
+
+        // Stage 14: signed-in devices. Looked up by id on every request (the
+        // _id index covers that), listed by user, and swept after expiry.
+        try {
+            mongoTemplate.indexOps("sessions").createIndex(
+                    new Index().on("expiresAt", Sort.Direction.ASC)
+                            .expire(Duration.ZERO)
+                            .named("sessions_expiresAt_ttl"));
+            mongoTemplate.indexOps("sessions").createIndex(
+                    new Index().on("userId", Sort.Direction.ASC)
+                            .on("lastActiveAt", Sort.Direction.DESC)
+                            .named("sessions_userId_lastActiveAt"));
+            log.info("Session indexes ready");
+        } catch (RuntimeException e) {
+            log.error("Failed to create session indexes — sign-in still works, "
+                    + "but expired sessions will not be cleaned up automatically", e);
+        }
+
+        // Stage 13: emailed sign-in codes.
+        try {
+            mongoTemplate.indexOps("otp_codes").createIndex(
+                    new Index().on("expiresAt", Sort.Direction.ASC)
+                            .expire(Duration.ZERO)
+                            .named("otp_codes_expiresAt_ttl"));
+            mongoTemplate.indexOps("otp_codes").createIndex(
+                    new Index().on("challengeHash", Sort.Direction.ASC)
+                            .unique()
+                            .named("otp_codes_challengeHash"));
+            mongoTemplate.indexOps("otp_codes").createIndex(
+                    new Index().on("userId", Sort.Direction.ASC)
+                            .on("purpose", Sort.Direction.ASC)
+                            .named("otp_codes_userId_purpose"));
+            log.info("Sign-in code indexes ready");
+        } catch (RuntimeException e) {
+            log.error("Failed to create otp_codes indexes — codes still work, "
+                    + "but expired codes will not be cleaned up automatically", e);
+        }
     }
 }

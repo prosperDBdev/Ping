@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
+import LoginCodeStep from "@/components/auth/LoginCodeStep";
 import useAuthStore from "@/store/authStore";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,6 +18,8 @@ export default function LoginPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  // Set when the password was right but two-step verification is on.
+  const [pendingCode, setPendingCode] = useState<{ challenge: string; emailHint: string } | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -26,7 +29,11 @@ export default function LoginPage() {
     e.preventDefault();
 
     try {
-      await login(formData.usernameOrEmail, formData.password);
+      const result = await login(formData.usernameOrEmail, formData.password);
+      if (!result.done) {
+        setPendingCode({ challenge: result.challenge, emailHint: result.emailHint });
+        return;
+      }
       toast.success("Welcome back! 👋");
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -37,7 +44,6 @@ export default function LoginPage() {
 
   return (
     <>
-      <Toaster position="top-center" />
       <AuthSplitLayout
         eyebrow="A quiet place to land"
         titleLines={[
@@ -47,6 +53,18 @@ export default function LoginPage() {
         ]}
         description="Ping keeps the meaningful bits close, so a message feels like a door opening — not another thing to keep up with."
       >
+        {pendingCode ? (
+          <LoginCodeStep
+            challenge={pendingCode.challenge}
+            emailHint={pendingCode.emailHint}
+            onSignedIn={() => {
+              toast.success("Welcome back! 👋");
+              router.push("/dashboard");
+            }}
+            onStartAgain={() => setPendingCode(null)}
+          />
+        ) : (
+        <>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-ping-teal mb-3">
           Welcome back
         </p>
@@ -186,6 +204,18 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* QR sign-in: for a computer, when your phone is already signed in. */}
+        <Link
+          href="/auth/qr"
+          className="mt-4 w-full border border-ping-sand text-ping-dark py-3.5 rounded-xl font-semibold hover:bg-ping-cream-dark transition flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
+          </svg>
+          Sign in with a QR code
+        </Link>
+
         <p className="mt-6 text-center text-sm text-ping-text-light">
           New to Ping?{" "}
           <Link
@@ -195,6 +225,8 @@ export default function LoginPage() {
             Create a space
           </Link>
         </p>
+        </>
+        )}
       </AuthSplitLayout>
     </>
   );

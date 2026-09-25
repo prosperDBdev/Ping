@@ -58,6 +58,7 @@ public class PasswordResetService {
     private final EmailService emailService;
     private final RateLimiter rateLimiter;
     private final MongoTemplate mongoTemplate;
+    private final SessionService sessionService;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
@@ -145,6 +146,11 @@ public class PasswordResetService {
 
         // Belt and braces: kill any other outstanding links for this account.
         tokenRepository.deleteByUserId(user.getId());
+
+        // And sign out every device, including any live connections. The token
+        // rule above already refuses old tokens; this also clears them from the
+        // device list, so the owner sees a clean slate.
+        sessionService.revokeAll(user.getId());
 
         log.info("Password reset completed for user {}", user.getId());
     }

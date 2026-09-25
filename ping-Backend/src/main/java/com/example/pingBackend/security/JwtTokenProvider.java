@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 import java.util.Optional;
 
@@ -26,18 +27,28 @@ public class JwtTokenProvider {
         this.expiration = expiration;
     }
 
-    // CREATE a token for a user
-    // Input: "john" → Output: "eyJhbGciOiJIUzI1NiJ9..."
-    public String generateToken(String username) {
+    /** The claim naming the signed-in device (a LoginSession id). */
+    public static final String SESSION_CLAIM = "sid";
+
+    // CREATE a token for a user, on one particular signed-in device.
+    // Only SessionService calls this, so every token names a session that
+    // exists, and signing that device out makes the token useless.
+    public String generateToken(String username, String sessionId) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
                 .subject(username)          // Who this token is for
+                .claim(SESSION_CLAIM, sessionId) // Which device it belongs to
                 .issuedAt(now)              // When it was created
                 .expiration(expiryDate)     // When it expires
                 .signWith(key)              // Sign with our secret key
                 .compact();                 // Build the string
+    }
+
+    /** How long a token (and so a signed-in session) lasts. */
+    public Duration lifetime() {
+        return Duration.ofMillis(expiration);
     }
 
     // EXTRACT username from a token

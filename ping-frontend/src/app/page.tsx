@@ -5,7 +5,6 @@ import PingLogo from "@/components/common/PingLogo";
 import useAuthStore from "@/store/authStore";
 import InstallAppButton from "@/components/pwa/InstallAppButton";
 import { useEffect } from "react";
-import { Toaster } from "react-hot-toast";
 
 /**
  * The feature list, written from what is actually shipped.
@@ -66,7 +65,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f7f4ec] text-[#1b2f35]">
-      <Toaster position="top-center" />
       <div className="mx-auto min-h-screen max-w-[1440px] bg-[#f7f4ec]">
         {/* Header */}
         <header className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-6 lg:px-10">

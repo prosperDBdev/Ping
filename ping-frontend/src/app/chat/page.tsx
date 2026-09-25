@@ -35,7 +35,7 @@ import {
 import TemporaryChatInvitePrompt from "@/components/temporary/TemporaryChatInvitePrompt";
 import { fetchPendingTemporaryChatInvites } from "@/lib/temporaryChat";
 import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { parseReplyQuote, snippetFor } from "@/lib/messageActions";
@@ -561,7 +561,6 @@ export default function ChatPage() {
 
   return (
     <>
-      <Toaster position="top-center" />
       <div className="h-dvh bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
         {/* Left Nav Sidebar (Desktop only) */}
         <NavSidebar

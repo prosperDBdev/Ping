@@ -29,6 +29,9 @@ public class UserResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String email;
     private String avatarUrl;
+    /** Only on your own profile (GET /api/users/me), like email. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Boolean twoFactorEnabled;
     private String status;
     private LocalDateTime lastSeen;
     private LocalDateTime createdAt;

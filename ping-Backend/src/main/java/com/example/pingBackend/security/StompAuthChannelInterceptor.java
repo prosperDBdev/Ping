@@ -78,14 +78,21 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         String header = accessor.getFirstNativeHeader("Authorization");
         String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : null;
 
-        User user = tokenAuthenticator.authenticate(token).orElseThrow(() -> {
+        TokenAuthenticator.Authenticated signedIn = tokenAuthenticator.authenticateSession(token).orElseThrow(() -> {
             log.warn("Refused WebSocket connection without a valid token (session {})", accessor.getSessionId());
             // Throwing here makes Spring answer with an ERROR frame and close the
             // connection — the client never reaches CONNECTED.
             return new MessageDeliveryException("Unauthorized");
         });
 
-        accessor.setUser(new UserIdAuthentication(user));
+        accessor.setUser(new UserIdAuthentication(signedIn.user()));
+
+        // Tag the connection with its device, so signing that device out can
+        // close this socket too (LiveConnectionRegistry). These attributes are
+        // the underlying WebSocket connection's own.
+        if (accessor.getSessionAttributes() != null) {
+            accessor.getSessionAttributes().put(LiveConnectionRegistry.SESSION_ATTRIBUTE, signedIn.sessionId());
+        }
     }
 
     private String requireUser(StompHeaderAccessor accessor) {

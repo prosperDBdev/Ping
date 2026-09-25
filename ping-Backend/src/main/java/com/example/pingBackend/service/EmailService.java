@@ -128,6 +128,60 @@ public class EmailService {
                 """.formatted(resetLink);
     }
 
+    /**
+     * Queues a 6-digit sign-in code (Stage 13). Queued like the reset email,
+     * so a slow Brevo never holds up the sign-in screen.
+     *
+     * @param forSignIn true for a sign-in, false for switching two-step
+     *                  verification on; only the wording differs
+     */
+    public void sendLoginCode(String toEmail, String code, boolean forSignIn) {
+        sender.execute(() -> deliverLoginCode(toEmail, code, forSignIn));
+    }
+
+    private void deliverLoginCode(String toEmail, String code, boolean forSignIn) {
+        if (!isConfigured()) {
+            if (frontendUrl.startsWith("http://localhost")) {
+                log.warn("EMAIL NOT CONFIGURED (local development) — sign-in code for {}: {}", toEmail, code);
+            } else {
+                log.error("Email is not configured: set BREVO_API_KEY and BREVO_SENDER_EMAIL. "
+                        + "A sign-in code was requested and no email was sent.");
+            }
+            return;
+        }
+
+        try {
+            postToBrevo(Map.of(
+                    "sender", Map.of("name", brevo.senderName(), "email", brevo.senderEmail()),
+                    "to", List.of(Map.of("email", toEmail)),
+                    "subject", code + " is your Ping code",
+                    "htmlContent", loginCodeHtml(code, forSignIn)));
+            log.info("Sign-in code email handed to Brevo");
+        } catch (RestClientException e) {
+            // Never the code itself in the log.
+            log.error("Brevo rejected the sign-in code email: {}", e.getMessage());
+        }
+    }
+
+    /** Only server-made values (six digits) go into this HTML. */
+    private static String loginCodeHtml(String code, boolean forSignIn) {
+        String intro = forSignIn
+                ? "Someone signed in to your Ping account with your password. If it was you, enter this code to finish:"
+                : "Enter this code in Ping to switch on two-step verification:";
+        String warning = forSignIn
+                ? "If this wasn't you, someone knows your password: reset it now from the sign-in page. They can't get in without this code."
+                : "If you didn't ask for this, you can ignore this email.";
+        return """
+                <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;color:#1b2f35">
+                  <h2 style="margin:0 0 12px">Your Ping code</h2>
+                  <p>%s</p>
+                  <p style="margin:24px 0;font-size:34px;font-weight:800;letter-spacing:10px">%s</p>
+                  <p>It works once and expires in 10 minutes. Ping will never ask you for this code anywhere else.</p>
+                  <p style="color:#738086;font-size:13px">%s</p>
+                </div>
+                """.formatted(intro, code, warning);
+    }
+
     /** One file to travel with an email, already base64-encoded as Brevo wants it. */
     public record Attachment(String fileName, String base64Content) {}
 

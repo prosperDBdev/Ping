@@ -111,6 +111,18 @@ public class User {
      */
     private LocalDateTime passwordChangedAt;
 
+    /**
+     * Two-step verification (Stage 13): when true, a correct password is not
+     * enough to sign in; a code emailed to this account's address is needed
+     * too. Boxed and null for every account created before it existed, which
+     * reads as off.
+     */
+    private Boolean twoFactorEnabled;
+
+    public boolean hasTwoFactor() {
+        return Boolean.TRUE.equals(twoFactorEnabled);
+    }
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }

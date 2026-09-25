@@ -1,6 +1,8 @@
 package com.example.pingBackend.config;
 
+import com.example.pingBackend.security.LiveConnectionRegistry;
 import com.example.pingBackend.security.StompAuthChannelInterceptor;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +18,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+    private final LiveConnectionRegistry liveConnectionRegistry;
 
     /** Same allow-list as REST CORS, so a deployed frontend can connect here too. */
     @Value("${app.cors.allowed-origins}")
@@ -51,5 +54,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(stompAuthChannelInterceptor);
+    }
+
+    /** Keep track of open connections, so signing a device out can close its socket. */
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(liveConnectionRegistry::decorate);
     }
 }

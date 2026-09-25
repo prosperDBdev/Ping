@@ -5,7 +5,6 @@ import com.example.pingBackend.dto.request.RegisterRequest;
 import com.example.pingBackend.dto.response.AuthResponse;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.UserRepository;
-import com.example.pingBackend.security.JwtTokenProvider;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,6 +20,7 @@ import java.util.UUID;
 import com.example.pingBackend.exception.ConflictException;
 import com.example.pingBackend.exception.TooManyRequestsException;
 import com.example.pingBackend.exception.InvalidCredentialsException;
+import com.example.pingBackend.exception.GoneException;
 
 @Service
 @RequiredArgsConstructor
@@ -28,9 +28,10 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
     private final RateLimiter rateLimiter;
     private final AppInviteService appInviteService;
+    private final SessionService sessionService;
+    private final LoginCodeService loginCodeService;
 
     // ------------------------------------------------------------------
     // Sign-in limits
@@ -74,7 +75,7 @@ public class AuthService {
         dummyHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, String userAgent) {
 
         // 1. Friendly checks first — these give the specific message almost everyone
         //    sees. 409 Conflict: the request is fine, it clashes with an existing account.
@@ -112,15 +113,16 @@ public class AuthService {
             throw duplicateAccount(e);
         }
 
-        // 4. Generate JWT token
-        String token = jwtTokenProvider.generateToken(savedUser.getUsername());
+        // 4. Sign this device in, and return who they are with the token.
+        return signedIn(savedUser, sessionService.issue(savedUser, userAgent, "REGISTER"));
+    }
 
-        // 5. Return response with token
+    private static AuthResponse signedIn(User user, String token) {
         return AuthResponse.builder()
                 .token(token)
-                .id(savedUser.getId())
-                .username(savedUser.getUsername())
-                .email(savedUser.getEmail())
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
                 .build();
     }
 
@@ -131,7 +133,7 @@ public class AuthService {
                 : new ConflictException("That username is already taken");
     }
 
-    public AuthResponse login(LoginRequest request, String clientIp) {
+    public AuthResponse login(LoginRequest request, String clientIp, String userAgent) {
         // Lower-cased for the limit keys only, so "Maya" and "maya" share one
         // counter — otherwise varying the capitalisation would be a free way
         // around the limit. The actual lookup below is unchanged.
@@ -184,13 +186,42 @@ public class AuthService {
         reserved.forEach(rateLimiter::release);
         rateLimiter.reset(limits.get(0).key());
 
-        String token = jwtTokenProvider.generateToken(user.get().getUsername());
+        // Two-step verification on: the password was right, but that alone
+        // isn't a sign-in. Email a code and hand back only a challenge; no
+        // token exists until the code is entered.
+        if (user.get().hasTwoFactor()) {
+            LoginCodeService.Issued issued = loginCodeService.issue(user.get(), LoginCodeService.Purpose.LOGIN);
+            return AuthResponse.builder()
+                    .twoFactorRequired(true)
+                    .challenge(issued.challenge())
+                    .emailHint(issued.emailHint())
+                    .build();
+        }
 
-        return AuthResponse.builder()
-                .token(token)
-                .id(user.get().getId())
-                .username(user.get().getUsername())
-                .email(user.get().getEmail())
-                .build();
+        return signedIn(user.get(), sessionService.issue(user.get(), userAgent, "PASSWORD"));
+    }
+
+    /**
+     * Step two of a two-step sign-in: the emailed code.
+     *
+     * Limited per IP as well as per code (5 guesses each), so one client can't
+     * work through many pending sign-ins at once.
+     */
+    public AuthResponse verifyLoginCode(String challenge, String code, String clientIp, String userAgent) {
+        if (!rateLimiter.tryAcquire("login-code-verify:ip:" + clientIp, 30, LOGIN_WINDOW)) {
+            throw new TooManyRequestsException("Too many attempts. Please wait 15 minutes and try again.");
+        }
+        String userId = loginCodeService.verify(challenge, code, LoginCodeService.Purpose.LOGIN);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new GoneException("This code has expired. Start again."));
+        return signedIn(user, sessionService.issue(user, userAgent, "EMAIL_CODE"));
+    }
+
+    /** "Send a new code" on the sign-in screen. */
+    public void resendLoginCode(String challenge) {
+        String userId = loginCodeService.ownerOf(challenge, LoginCodeService.Purpose.LOGIN);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new GoneException("This code has expired. Start again."));
+        loginCodeService.resend(challenge, user, LoginCodeService.Purpose.LOGIN);
     }
 }
