@@ -557,7 +557,7 @@ export default function ChatPage() {
   return (
     <>
       <Toaster position="top-center" />
-      <div className="h-screen bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
+      <div className="h-dvh bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
         {/* Left Nav Sidebar (Desktop only) */}
         <NavSidebar
           activeView={mainView}
@@ -633,16 +633,8 @@ export default function ChatPage() {
                     )}
                   </div>
 
-                  {/* Mobile: Floating Coral '+' button next to "Your pings" heading (Image 1 replica) */}
-                  <button
-                    onClick={() => setMainView("new-private")}
-                    className="w-9 h-9 bg-ping-orange rounded-full flex items-center justify-center text-white hover:bg-ping-orange-light transition shadow-xs md:hidden"
-                    title="New conversation"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                  </button>
+                  {/* No "+" here on phones: the one beside "Conversations" does the
+                      same thing, and two identical buttons stacked read as a mistake. */}
 
                   {/* Desktop Header Actions (Image 2 replica: Sync icon + Profile dropdown) */}
                   <div className="hidden md:flex items-center gap-3">

@@ -23,7 +23,11 @@ export default function SettingsPage() {
   const router = useRouter();
 
   return (
-    <div className="h-screen bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
+    // h-dvh, not h-screen. h-screen is 100vh, which on phones means the height
+    // with the browser's address bar HIDDEN. While the bar is showing, a 100vh
+    // page is taller than the screen and the tab bar sits below the bottom edge
+    // until you scroll. dvh ("dynamic viewport height") follows the bar.
+    <div className="h-dvh bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
       <NavSidebar
         activeView="settings"
         onGoDashboard={() => router.push("/dashboard")}

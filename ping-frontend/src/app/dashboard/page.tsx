@@ -108,7 +108,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="h-screen bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
+    <div className="h-dvh bg-ping-cream dark:bg-ping-night-bg flex overflow-hidden font-sans text-ping-dark dark:text-ping-night-text">
       <NavSidebar
         activeView="dashboard"
         onGoDashboard={() => {}}

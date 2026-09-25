@@ -18,6 +18,8 @@ interface AvatarProps {
   textClassName?: string;
   /** Background for the initials fallback. */
   fallbackClassName?: string;
+  /** Tap the photo to see it full screen (only when there is a photo). */
+  enlargeable?: boolean;
 }
 
 const isLocal = (url: string) => url.startsWith("blob:") || url.startsWith("data:");
@@ -43,8 +45,19 @@ export default function Avatar({
   className = "w-10 h-10",
   textClassName = "text-sm",
   fallbackClassName = "bg-ping-dark dark:bg-ping-night-card-active",
+  enlargeable = false,
 }: AvatarProps) {
   const [fetched, setFetched] = useState<{ from: string; url: string } | null>(null);
+  const [enlarged, setEnlarged] = useState(false);
+
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEnlarged(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [enlarged]);
 
   useEffect(() => {
     // Nothing to fetch: either there's no photo, or the bytes are already in
@@ -89,15 +102,39 @@ export default function Avatar({
         : null;
 
   if (src) {
+    const alt = username ? `${username}'s profile photo` : "Profile photo";
+    // Plain <img>, not next/image: the source is a runtime blob: URL, so
+    // there is nothing for Next's optimizer to pre-process.
+    // eslint-disable-next-line @next/next/no-img-element
+    const image = <img src={src} alt={alt} className={`${className} rounded-full object-cover`} />;
+    if (!enlargeable) return image;
+
     return (
-      // Plain <img>, not next/image: the source is a runtime blob: URL, so
-      // there is nothing for Next's optimizer to pre-process.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={username ? `${username}'s profile photo` : "Profile photo"}
-        className={`${className} rounded-full object-cover`}
-      />
+      <>
+        <button
+          type="button"
+          onClick={() => setEnlarged(true)}
+          aria-label={`View ${alt}`}
+          className="rounded-full focus:outline-none focus:ring-2 focus:ring-ping-teal/50"
+        >
+          {image}
+        </button>
+        {enlarged && (
+          // The same image the small avatar already loaded, so opening it is
+          // instant. data-no-swipe: a sideways flick here isn't a tab change.
+          <div
+            data-no-swipe
+            role="dialog"
+            aria-modal="true"
+            aria-label={alt}
+            onClick={() => setEnlarged(false)}
+            className="fixed inset-0 z-[70] bg-black/85 flex items-center justify-center p-6"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={alt} className="max-w-full max-h-full rounded-2xl object-contain shadow-2xl" />
+          </div>
+        )}
+      </>
     );
   }
 

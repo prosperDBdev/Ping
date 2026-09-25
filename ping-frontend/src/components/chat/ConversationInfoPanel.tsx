@@ -129,6 +129,7 @@ export default function ConversationInfoPanel({
             className="w-16 h-16 mb-3"
             textClassName="text-xl"
             fallbackClassName={colorFor(displayName)}
+            enlargeable
           />
         )}
         <h2 className="font-bold text-ping-dark dark:text-ping-night-text text-base">{displayName}</h2>
