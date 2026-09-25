@@ -358,8 +358,8 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
 
           <BlockedUsersSection />
 
-          <div className="pt-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-ping-teal dark:text-ping-teal-light mb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light mb-3">
               Status privacy
             </p>
             <StatusPrivacySection />

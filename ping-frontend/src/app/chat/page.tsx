@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
 import useWorkspaceStore from "@/store/workspaceStore";
-import useWebSocket from "@/hooks/useWebSocket";
+import { useRealtime } from "@/components/common/RealtimeProvider";
 import useResizableSidebar from "@/hooks/useResizableSidebar";
 import useConversationsSync from "@/hooks/useConversationsSync";
 import NavSidebar from "@/components/sidebar/NavSidebar";
@@ -71,7 +71,7 @@ export default function ChatPage() {
     onTemporaryChatInvite,
     onTemporaryChatResponse,
     onRemovedFromConversation,
-  } = useWebSocket();
+  } = useRealtime();
   // A dashboard quick action can deep-link straight into a panel, e.g. /chat?view=new-private.
   // ChatPage only ever mounts client-side (ProtectedRoute gates it behind a
   // hydration check), so reading location.search in the initializer is safe.
@@ -155,6 +155,16 @@ export default function ChatPage() {
         (p) => p.id !== user?.id && blockedUserIds.includes(p.id)
       )
   );
+
+  // Tell the shared connection whether a chat is really on screen (see
+  // chatOnScreen in the chat store). A flag rather than clearing the open
+  // conversation on the way out: React mounts pages twice in development, and
+  // clearing on unmount would wipe the chat someone just tapped on Home.
+  useEffect(() => {
+    const { setChatOnScreen } = useChatStore.getState();
+    setChatOnScreen(true);
+    return () => setChatOnScreen(false);
+  }, []);
 
   // Initial load plus recovery (store-level retry + refetch on focus), shared
   // with the dashboard so the two can't drift apart again.
@@ -503,7 +513,7 @@ export default function ChatPage() {
                 <div className="flex items-center justify-between pb-3 md:hidden">
                   <PingLogo />
                   <div className="flex items-center gap-2">
-                    <ThemeToggle variant="pill" />
+                    <ThemeToggle />
                     <button
                       onClick={() => router.push("/settings")}
                       className="relative"

@@ -1,3 +1,4 @@
+import RealtimeProvider from "@/components/common/RealtimeProvider";
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
@@ -72,7 +73,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ServiceWorkerRegistrar />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

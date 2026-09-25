@@ -1,5 +1,6 @@
 "use client";
 
+import useChatStore from "@/store/chatStore";
 import { useRouter } from "next/navigation";
 import useSwipeTabs from "@/hooks/useSwipeTabs";
 import { MOBILE_TABS, MobileTab, rememberDirection } from "@/lib/mobileTabs";
@@ -50,6 +51,11 @@ const ICONS: Record<MobileTab, React.ReactNode> = {
  * navigation of any kind.
  */
 export default function MobileBottomNav({ active, swipeEnabled = true }: MobileBottomNavProps) {
+  // Total unread across every chat, kept live by the app-wide connection, so
+  // the Pings tab can say "you have messages" from any page.
+  const unread = useChatStore((s) =>
+    s.conversations.reduce((total, c) => total + (c.unreadCount || 0), 0)
+  );
   const router = useRouter();
   useSwipeTabs(active, swipeEnabled);
 
@@ -77,9 +83,19 @@ export default function MobileBottomNav({ active, swipeEnabled = true }: MobileB
                 : "text-ping-text-light dark:text-ping-night-text-light font-medium active:bg-ping-cream-dark dark:active:bg-ping-night-bg"
             }`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              {ICONS[tab.id]}
-            </svg>
+            <span className="relative">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                {ICONS[tab.id]}
+              </svg>
+              {tab.id === "pings" && unread > 0 && (
+                <span
+                  aria-label={`${unread} unread`}
+                  className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-ping-orange text-white text-[9px] font-bold leading-4 text-center"
+                >
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </span>
             <span className="text-[10px]">{tab.label}</span>
           </button>
         );

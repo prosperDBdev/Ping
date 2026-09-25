@@ -27,7 +27,7 @@ export default function PingLogo({
       {!compact && (
         <div className="leading-tight">
           <p
-            className={`font-bold text-base leading-none ${
+            className={`font-bold text-base leading-tight ${
               light ? "text-white" : "text-ping-dark dark:text-ping-night-text"
             }`}
           >

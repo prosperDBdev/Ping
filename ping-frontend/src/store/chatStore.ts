@@ -28,6 +28,16 @@ interface ChatState {
   markAsRead: (conversationId: string) => Promise<void>;
   markAllMessagesAsSeen: (conversationId: string) => void;
   clearChat: () => void;
+  /**
+   * Whether the Chats page is actually on screen. The live connection now runs
+   * on every page, so "the active conversation" on its own no longer means
+   * "the chat you're looking at". It may just be the last one you opened
+   * before going to Home. Anything that should only happen while you're
+   * reading a chat (auto read receipts, holding back the unread count) checks
+   * this as well.
+   */
+  chatOnScreen: boolean;
+  setChatOnScreen: (onScreen: boolean) => void;
 }
 
 // Backoff for a conversation fetch that couldn't reach the server: 1s, 2s, 4s,
@@ -107,6 +117,10 @@ const useChatStore = create<ChatState>((set, get) => ({
       }, delayMs);
     }
   },
+
+  chatOnScreen: false,
+
+  setChatOnScreen: (onScreen: boolean) => set({ chatOnScreen: onScreen }),
 
   setActiveConversation: (conversation: Conversation) => {
     set((state) =>
@@ -218,9 +232,10 @@ const useChatStore = create<ChatState>((set, get) => ({
               timestamp: message.createdAt,
             },
             updatedAt: message.createdAt,
-            // Increment unread if not active conversation
+            // Count it as unread unless you're looking at this exact chat
+            // right now: on the Chats page with this conversation open.
             unreadCount:
-              state.activeConversation?.id === conversationId
+              state.chatOnScreen && state.activeConversation?.id === conversationId
                 ? conv.unreadCount
                 : conv.unreadCount + 1,
           };

@@ -24,6 +24,7 @@ export default function useWebSocket() {
     markAsRead,
     markAllMessagesAsSeen,
     upsertConversation,
+    chatOnScreen,
   } = useChatStore();
 
   // Two separate lifetimes: session-wide subscriptions (opened once on
@@ -139,7 +140,10 @@ export default function useWebSocket() {
   // Subscribe to active conversation
   useEffect(() => {
     const client = clientRef.current;
-    if (!client || !client.connected || !activeConversation) return;
+    // chatOnScreen: this connection now outlives the Chats page. Without the
+    // check, the chat you last opened would keep auto-sending read receipts
+    // while you were on Home, marking messages read that nobody had seen.
+    if (!client || !client.connected || !activeConversation || !chatOnScreen) return;
 
     const convId = activeConversation.id;
 
@@ -201,7 +205,7 @@ export default function useWebSocket() {
       conversationSubsRef.current.forEach((sub) => sub.unsubscribe());
       conversationSubsRef.current.clear();
     };
-  }, [activeConversation?.id, isConnected]);
+  }, [activeConversation?.id, isConnected, chatOnScreen]);
 
   /**
    * Publish a frame, reporting whether it actually went out.
