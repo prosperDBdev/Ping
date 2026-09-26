@@ -741,9 +741,11 @@ export default function ChatPage() {
                   </h2>
                 </div>
                 <button
+                  data-tour="new-chat"
                   onClick={() => setMainView("new-private")}
                   className="w-8 h-8 bg-ping-orange rounded-full flex items-center justify-center text-white hover:bg-ping-orange-light transition shadow-xs flex-shrink-0"
                   title="New conversation"
+                  aria-label="New conversation"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -806,12 +808,31 @@ export default function ChatPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                       </svg>
                     </div>
-                    <p className="text-ping-dark dark:text-ping-night-text font-semibold text-sm mb-1">
-                      No conversations found
-                    </p>
-                    <p className="text-ping-text-light dark:text-ping-night-text-light text-xs text-center">
-                      Start a new conversation to start chatting.
-                    </p>
+                    {searchQuery.trim() ? (
+                      <>
+                        <p className="text-ping-dark dark:text-ping-night-text font-semibold text-sm mb-1">
+                          No chats match &ldquo;{searchQuery.trim()}&rdquo;
+                        </p>
+                        <p className="text-ping-text-light dark:text-ping-night-text-light text-xs text-center">
+                          To message someone new, tap + and search for their username.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-ping-dark dark:text-ping-night-text font-semibold text-sm mb-1">
+                          No chats yet
+                        </p>
+                        <p className="text-ping-text-light dark:text-ping-night-text-light text-xs text-center mb-4">
+                          Find a friend by their username and say hello.
+                        </p>
+                        <button
+                          onClick={() => setMainView("new-private")}
+                          className="text-xs font-bold text-white bg-ping-orange px-4 py-2 rounded-xl hover:bg-ping-orange-light transition"
+                        >
+                          Start a chat
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <>

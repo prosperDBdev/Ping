@@ -1,5 +1,6 @@
 import MessageNotifier from "@/components/common/MessageNotifier";
 import AppToaster from "@/components/common/AppToaster";
+import FirstChatGuide from "@/components/onboarding/FirstChatGuide";
 import RealtimeProvider from "@/components/common/RealtimeProvider";
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
@@ -88,6 +89,7 @@ export default function RootLayout({
             {children}
             <MessageNotifier />
             <AppToaster />
+            <FirstChatGuide />
           </RealtimeProvider>
         </ThemeProvider>
       </body>

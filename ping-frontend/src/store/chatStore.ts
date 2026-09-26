@@ -8,6 +8,8 @@ interface ChatState {
   activeConversation: Conversation | null;
   messages: Message[];
   isLoadingConversations: boolean;
+  /** True once the chat list has loaded at least once, so "empty" really means empty. */
+  conversationsLoaded: boolean;
   /** True when the last conversation fetch failed — lets the UI offer a retry
    *  instead of showing an empty inbox that looks like "you have no chats". */
   conversationsFailed: boolean;
@@ -94,6 +96,7 @@ const useChatStore = create<ChatState>((set, get) => ({
   activeConversation: null,
   messages: [],
   isLoadingConversations: false,
+  conversationsLoaded: false,
   conversationsFailed: false,
   isLoadingMessages: false,
   hasMoreMessages: true,
@@ -105,7 +108,7 @@ const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoadingConversations: true });
     try {
       const res = await api.get("/conversations");
-      set({ conversations: res.data, isLoadingConversations: false, conversationsFailed: false });
+      set({ conversations: res.data, isLoadingConversations: false, conversationsFailed: false, conversationsLoaded: true });
     } catch (err) {
       // The failure that actually happens in practice: you start both servers
       // and open the app, but Spring Boot needs a while before it accepts

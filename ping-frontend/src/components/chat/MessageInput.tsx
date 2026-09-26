@@ -292,7 +292,7 @@ export default function MessageInput({
           </button>
         </div>
       ) : (
-        <div className="bg-[#EFEAE2] dark:bg-ping-night-surface border border-[#E3DDD3] dark:border-ping-night-border rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
+        <div data-tour="composer" className="bg-[#EFEAE2] dark:bg-ping-night-surface border border-[#E3DDD3] dark:border-ping-night-border rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
           {/* Attachment */}
           <input
             ref={fileInputRef}
@@ -352,6 +352,7 @@ export default function MessageInput({
             /* Send */
             <button
               onClick={handleSend}
+              aria-label="Send message"
               className="w-9 h-9 bg-ping-orange rounded-full flex items-center justify-center text-white hover:bg-ping-orange-light transition flex-shrink-0 shadow-xs"
             >
               <svg className="w-4 h-4 translate-x-0.5" fill="currentColor" viewBox="0 0 20 20">

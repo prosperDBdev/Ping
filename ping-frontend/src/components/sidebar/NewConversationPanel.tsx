@@ -222,7 +222,7 @@ export default function NewConversationPanel({
             )}
 
             {/* Search */}
-            <div className="relative mb-4">
+            <div data-tour="find-people" className="relative mb-4">
               <svg
                 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ping-text-light dark:text-ping-night-text-light"
                 fill="none"
