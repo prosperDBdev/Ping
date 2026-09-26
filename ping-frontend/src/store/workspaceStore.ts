@@ -84,13 +84,10 @@ interface WorkspaceState {
   createEvent: (input: CreateEventInput) => CalendarEvent;
   deleteEvent: (conversationId: string, eventId: string) => void;
 
-  togglePin: (
-    conversationId: string,
-    messageId: string,
-    messageSnippet: string,
-    messageSenderUsername: string,
-    userId: string
-  ) => void;
+  /** Load a chat's pinned messages (shared by everyone in it). */
+  loadPins: (conversationId: string) => Promise<void>;
+  /** Pin or unpin for everyone. Throws if the server refuses. */
+  togglePin: (conversationId: string, messageId: string) => Promise<"pinned" | "unpinned">;
   isPinned: (conversationId: string, messageId: string) => boolean;
 
   toggleReaction: (messageId: string, emoji: string, userId: string) => void;
@@ -245,28 +242,20 @@ const useWorkspaceStore = create<WorkspaceState>()(
         }));
       },
 
-      togglePin: (conversationId, messageId, messageSnippet, messageSenderUsername, userId) => {
-        set((state) => {
-          const existing = state.pinsByConversation[conversationId] || [];
-          const already = existing.find((p) => p.messageId === messageId);
-          const next = already
-            ? existing.filter((p) => p.messageId !== messageId)
-            : [
-                {
-                  id: genId(),
-                  conversationId,
-                  messageId,
-                  messageSnippet,
-                  messageSenderUsername,
-                  pinnedBy: userId,
-                  pinnedAt: new Date().toISOString(),
-                },
-                ...existing,
-              ];
-          return {
-            pinsByConversation: { ...state.pinsByConversation, [conversationId]: next },
-          };
-        });
+      loadPins: async (conversationId) => {
+        const res = await api.get(`/conversations/${conversationId}/pins`);
+        set((state) => ({
+          pinsByConversation: { ...state.pinsByConversation, [conversationId]: res.data as PinnedItem[] },
+        }));
+      },
+
+      togglePin: async (conversationId, messageId) => {
+        const pinned = get().isPinned(conversationId, messageId);
+        const url = `/conversations/${conversationId}/messages/${messageId}/pin`;
+        if (pinned) await api.delete(url);
+        else await api.put(url);
+        await get().loadPins(conversationId);
+        return pinned ? "unpinned" : "pinned";
       },
 
       isPinned: (conversationId, messageId) => {
@@ -310,6 +299,8 @@ const useWorkspaceStore = create<WorkspaceState>()(
       // uploaded are kept, so they survive until they are.
       partialize: (state) => ({
         ...state,
+        // Pins come from the server; old browser-only pins aren't kept.
+        pinsByConversation: {},
         tasksByConversation: Object.fromEntries(
           Object.entries(state.tasksByConversation)
             .map(([cid, list]) => [cid, list.filter((t) => isLegacyTaskId(t.id))] as const)

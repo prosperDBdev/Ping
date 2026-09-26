@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { Message } from "@/types";
 import useAuthStore from "@/store/authStore";
 import useWorkspaceStore from "@/store/workspaceStore";
-import { buildReplyQuote, parseReplyQuote, snippetFor, suggestActionsForMessage } from "@/lib/messageActions";
+import { buildReplyQuote, parseReplyQuote, suggestActionsForMessage } from "@/lib/messageActions";
 import { MessageActionSheet, MessageHoverToolbar } from "@/components/chat/MessageActions";
 import VoiceMessagePlayer from "@/components/chat/VoiceMessagePlayer";
 import useSwipeToReply from "@/hooks/useSwipeToReply";
@@ -112,14 +112,9 @@ export default function MessageBubble({
   };
 
   const handlePin = () => {
-    togglePin(
-      message.conversationId,
-      message.id,
-      snippetFor(body),
-      message.senderUsername,
-      user?.id || ""
-    );
-    toast.success(pinned ? "Unpinned" : "Pinned to Important");
+    togglePin(message.conversationId, message.id)
+      .then((result) => toast.success(result === "pinned" ? "Pinned for everyone in this chat" : "Unpinned"))
+      .catch((err) => toast.error(apiErrorMessage(err, "Couldn't change the pin")));
   };
 
   const handleReact = async (emoji: string) => {
@@ -178,7 +173,9 @@ export default function MessageBubble({
         store.removeMessage(message.id);
       }
       // A pin pointing at a message that's gone would be a dead link.
-      if (pinned) togglePin(message.conversationId, message.id, snippetFor(body), message.senderUsername, user?.id || "");
+      // The server drops the pin of a message deleted for everyone; a message
+      // deleted for you leaves your own pin list. Either way, reload it.
+      if (pinned) void useWorkspaceStore.getState().loadPins(message.conversationId).catch(() => {});
       setDeleteDialog(null);
     } catch (err) {
       toast.error(apiErrorMessage(err, "Couldn't delete that message"));

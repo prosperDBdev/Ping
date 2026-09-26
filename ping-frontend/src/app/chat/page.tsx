@@ -37,6 +37,7 @@ import { fetchPendingTemporaryChatInvites } from "@/lib/temporaryChat";
 import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import PinnedBanner from "@/components/chat/PinnedBanner";
 import { apiErrorMessage } from "@/lib/messages";
 import { chatName, chatPartner } from "@/lib/conversation";
 import PingLogo from "@/components/common/PingLogo";
@@ -958,6 +959,7 @@ export default function ChatPage() {
                       <PinnedPanel conversation={activeConversation} onJumpToMessage={handleJumpToMessage} />
                     ) : (
                       <>
+                        <PinnedBanner conversationId={activeConversation.id} onJump={handleJumpToMessage} />
                         {/* Messages Container */}
                         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 bg-ping-cream dark:bg-ping-night-bg scrollbar-thin">
                           {isGroupChat && groupBanner && (

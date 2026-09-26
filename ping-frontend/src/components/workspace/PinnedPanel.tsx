@@ -5,6 +5,8 @@ import { Conversation } from "@/types";
 import useWorkspaceStore from "@/store/workspaceStore";
 import EmptyState from "@/components/workspace/EmptyState";
 import { colorFor, initialsFor } from "@/lib/avatar";
+import { pinPreview } from "@/components/chat/PinnedBanner";
+import { apiErrorMessage } from "@/lib/messages";
 
 interface PinnedPanelProps {
   conversation: Conversation;
@@ -25,9 +27,10 @@ export default function PinnedPanel({ conversation, onJumpToMessage }: PinnedPan
   const { pinsByConversation, togglePin } = useWorkspaceStore();
   const pins = pinsByConversation[conversation.id] || [];
 
-  const handleUnpin = (messageId: string, snippet: string, sender: string) => {
-    togglePin(conversation.id, messageId, snippet, sender, "");
-    toast.success("Unpinned");
+  const handleUnpin = (messageId: string) => {
+    togglePin(conversation.id, messageId)
+      .then(() => toast.success("Unpinned for everyone"))
+      .catch((err) => toast.error(apiErrorMessage(err, "Couldn't unpin that")));
   };
 
   return (
@@ -35,7 +38,7 @@ export default function PinnedPanel({ conversation, onJumpToMessage }: PinnedPan
       <div className="px-4 sm:px-6 pt-4 pb-3 flex-shrink-0">
         <h3 className="text-base font-black text-ping-dark dark:text-ping-night-text">Pinned & important</h3>
         <p className="text-xs text-ping-text-light dark:text-ping-night-text-light">
-          {pins.length} message{pins.length !== 1 ? "s" : ""} saved for easy access
+          {pins.length} of 3 pinned · everyone in this chat sees them
         </p>
       </div>
 
@@ -54,7 +57,7 @@ export default function PinnedPanel({ conversation, onJumpToMessage }: PinnedPan
           <div className="space-y-2.5 pt-1">
             {pins.map((pin) => (
               <div
-                key={pin.id}
+                key={pin.messageId}
                 className="bg-white dark:bg-ping-night-card rounded-2xl border border-ping-sand/60 dark:border-ping-night-border p-4"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -66,11 +69,11 @@ export default function PinnedPanel({ conversation, onJumpToMessage }: PinnedPan
                       {pin.messageSenderUsername}
                     </span>
                     <span className="text-[10px] text-ping-text-light dark:text-ping-night-text-light">
-                      · pinned {formatRelative(pin.pinnedAt)}
+                      · pinned {pin.pinnedByUsername ? `by ${pin.pinnedByUsername} ` : ""}{formatRelative(pin.pinnedAt)}
                     </span>
                   </div>
                   <button
-                    onClick={() => handleUnpin(pin.messageId, pin.messageSnippet, pin.messageSenderUsername)}
+                    onClick={() => handleUnpin(pin.messageId)}
                     aria-label="Unpin"
                     className="text-ping-text-light dark:text-ping-night-text-light hover:text-ping-orange transition"
                   >
@@ -83,7 +86,7 @@ export default function PinnedPanel({ conversation, onJumpToMessage }: PinnedPan
                   onClick={() => onJumpToMessage(pin.messageId)}
                   className="text-sm text-ping-dark/80 dark:text-ping-night-text/80 leading-relaxed text-left hover:text-ping-teal dark:hover:text-ping-teal-light transition"
                 >
-                  &ldquo;{pin.messageSnippet}&rdquo;
+                  &ldquo;{pinPreview(pin)}&rdquo;
                 </button>
               </div>
             ))}

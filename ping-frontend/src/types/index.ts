@@ -157,13 +157,15 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
+/** A pinned message, shared by everyone in the chat (from the server). */
 export interface PinnedItem {
-  id: string;
-  conversationId: string;
   messageId: string;
-  messageSnippet: string;
+  conversationId: string;
+  messageContent: string;
+  messageType: string;
   messageSenderUsername: string;
   pinnedBy: string;
+  pinnedByUsername: string | null;
   pinnedAt: string;
 }
 

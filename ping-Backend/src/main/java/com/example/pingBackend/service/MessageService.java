@@ -512,7 +512,7 @@ public class MessageService {
      * its id in the path: a classic insecure direct object reference. Unknown
      * and elsewhere look identical on purpose.
      */
-    private Message findInConversation(String conversationId, String messageId) {
+    Message findInConversation(String conversationId, String messageId) {
         return messageRepository.findById(messageId)
                 .filter(m -> conversationId.equals(m.getConversationId()))
                 .orElseThrow(() -> new NotFoundException("Message not found"));

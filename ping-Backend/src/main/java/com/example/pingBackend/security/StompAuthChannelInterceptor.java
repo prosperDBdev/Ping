@@ -51,7 +51,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     // miss one.
     private static final Pattern USER_TOPIC = Pattern.compile("^/topic/user/([^/]+)(/[^/]+)*$");
     private static final Pattern CONVERSATION_TOPIC =
-            Pattern.compile("^/topic/conversation/([^/]+)(/typing|/read|/tasks)?$");
+            Pattern.compile("^/topic/conversation/([^/]+)(/typing|/read|/tasks|/pins)?$");
 
     private final TokenAuthenticator tokenAuthenticator;
     private final ConversationRepository conversationRepository;

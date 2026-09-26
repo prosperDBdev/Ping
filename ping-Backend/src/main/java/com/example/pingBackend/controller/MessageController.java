@@ -24,6 +24,7 @@ public class MessageController {
 
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final com.example.pingBackend.service.PinService pinService;
 
     // Get message history (paginated)
     @GetMapping
@@ -89,6 +90,8 @@ public class MessageController {
         if ("everyone".equals(scope)) {
             MessageResponse marker = messageService.deleteForEveryone(conversationId, messageId, currentUser.getId());
             messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, marker);
+            // A deleted message can't stay pinned.
+            pinService.dropPin(conversationId, messageId);
             return ResponseEntity.ok(marker);
         }
         if ("me".equals(scope)) {

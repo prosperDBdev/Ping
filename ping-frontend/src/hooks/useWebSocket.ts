@@ -244,6 +244,14 @@ export default function useWebSocket() {
     });
     conversationSubsRef.current.set("tasks", tasksSub);
 
+    // Pins changed (someone pinned or unpinned): reload this chat's pins.
+    // Loaded once on opening, too.
+    void useWorkspaceStore.getState().loadPins(convId).catch(() => {});
+    const pinsSub = client.subscribe(`/topic/conversation/${convId}/pins`, () => {
+      void useWorkspaceStore.getState().loadPins(convId).catch(() => {});
+    });
+    conversationSubsRef.current.set("pins", pinsSub);
+
     return () => {
       conversationSubsRef.current.forEach((sub) => sub.unsubscribe());
       conversationSubsRef.current.clear();

@@ -67,6 +67,23 @@ public class Conversation {
     @Builder.Default
     private Map<String, LocalDateTime> hiddenAt = new HashMap<>();
 
+    /**
+     * Pinned messages, shared by everyone in the chat (at most three, oldest
+     * dropped first). See PinService.
+     */
+    @Builder.Default
+    private java.util.List<Pin> pins = new java.util.ArrayList<>();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Pin {
+        private String messageId;
+        private String pinnedBy;
+        private LocalDateTime pinnedAt;
+    }
+
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 

@@ -239,6 +239,10 @@ forge a new IP per request.
   never broadcast on the conversation topic). Assignees must be participants.
   Only a task's creator or the group admin can delete it. Reminder sends are
   claimed atomically, so each goes out once.
+- **Pins** are shared by a conversation's participants only, and a message can
+  only be pinned through its own conversation. At most three, enforced in the
+  database update ($push with $slice). A message deleted for everyone loses its
+  pin, and each person's pin list omits messages they cleared or deleted.
 - **Deleting a chat** from your chat list is per user and participants only:
   it hides the conversation from your list and clears it for you, in one
   atomic update of your own fields. Nothing is deleted, and the other
