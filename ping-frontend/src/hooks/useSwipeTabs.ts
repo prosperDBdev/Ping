@@ -20,7 +20,8 @@ const HORIZONTAL_DOMINANCE = 1.5;
 const EDGE_GUARD_PX = 24;
 
 /** Elements where a sideways finger movement already means something. */
-const OWNS_HORIZONTAL_GESTURES = 'input, textarea, select, [contenteditable="true"], [data-no-swipe]';
+const OWNS_HORIZONTAL_GESTURES =
+  'input, textarea, select, [contenteditable="true"], [data-no-swipe], [data-swipe-reply]';
 
 /** True if the touch started inside something that scrolls sideways on its own. */
 function insideHorizontalScroller(start: Element | null): boolean {

@@ -139,6 +139,12 @@ export default function MessageInput({
     if (recorder.error) toast.error(recorder.error);
   }, [recorder.error]);
 
+  // Starting a reply (a swipe, or Reply in the menu) puts you straight into
+  // the message box, keyboard up, like WhatsApp.
+  useEffect(() => {
+    if (replyingTo) textareaRef.current?.focus();
+  }, [replyingTo]);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
 

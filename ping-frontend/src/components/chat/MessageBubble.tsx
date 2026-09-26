@@ -19,6 +19,7 @@ import useWorkspaceStore from "@/store/workspaceStore";
 import { buildReplyQuote, parseReplyQuote, snippetFor, suggestActionsForMessage } from "@/lib/messageActions";
 import { MessageActionSheet, MessageHoverToolbar } from "@/components/chat/MessageActions";
 import VoiceMessagePlayer from "@/components/chat/VoiceMessagePlayer";
+import useSwipeToReply from "@/hooks/useSwipeToReply";
 import ImageAttachment from "@/components/chat/ImageAttachment";
 
 interface MessageBubbleProps {
@@ -48,6 +49,12 @@ export default function MessageBubble({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // Swipe right on a message to reply to it (phones; computers use the
+  // hover toolbar). Not while editing, and not on deleted or system notes.
+  const swipe = useSwipeToReply(
+    () => onReply(message),
+    !editing && !message.deletedAt && message.type !== "SYSTEM"
+  );
   // The delete choices. `everyoneAllowed` is worked out when the dialog
   // opens (it depends on the time), and is only a guide: the server checks
   // the 48 hours again by its own clock.
@@ -269,11 +276,34 @@ export default function MessageBubble({
   return (
     <div
       id={`message-${message.id}`}
-      className={`group flex ${isMine ? "justify-end" : "justify-start"} mb-3 scroll-mt-6 transition-colors rounded-2xl ${
+      data-swipe-reply
+      {...swipe.handlers}
+      // pan-y: the browser still scrolls up and down, but a sideways drag
+      // comes to us, for swipe-to-reply.
+      style={{ touchAction: "pan-y" }}
+      className={`group relative flex ${isMine ? "justify-end" : "justify-start"} mb-3 scroll-mt-6 transition-colors rounded-2xl ${
         highlighted ? "bg-[#f4ce62]/20" : ""
       }`}
     >
-      <div className={`relative max-w-[78%] sm:max-w-[65%] ${isMine ? "items-end" : "items-start"}`}>
+      {/* The reply arrow that appears behind the message as it's swiped. */}
+      {swipe.offset > 0 && (
+        <div
+          aria-hidden
+          className="absolute left-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-ping-cream-dark dark:bg-ping-night-card text-ping-teal dark:text-ping-teal-light"
+          style={{ opacity: swipe.progress, transform: `translateY(-50%) scale(${0.6 + swipe.progress * 0.4})` }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 016 6v2" />
+          </svg>
+        </div>
+      )}
+      <div
+        className={`relative max-w-[78%] sm:max-w-[65%] ${isMine ? "items-end" : "items-start"}`}
+        style={{
+          transform: swipe.offset ? `translateX(${swipe.offset}px)` : undefined,
+          transition: swipe.dragging ? "none" : "transform 180ms ease-out",
+        }}
+      >
         {/* Sender name above incoming message — group chats only */}
         {!isMine && showSender && (
           <p className="text-[11px] font-semibold text-ping-teal dark:text-ping-teal-light mb-1 ml-1">
