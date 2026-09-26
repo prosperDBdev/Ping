@@ -49,7 +49,8 @@ public class UserController {
         List<UserResponse> users = userRepository
                 .findByUsernameContainingIgnoreCase(query)
                 .stream()
-                .filter(user -> !user.getId().equals(currentUser.getId()))  // Exclude self
+                // You're included: searching your own name is how you open
+                // your chat with yourself ("message yourself").
                 // BLOCK-CHECK (3 of 3) — blocked users don't appear in search
                 // at all, in either direction. Showing someone you can't
                 // actually message is a dead end, and showing the blocker in

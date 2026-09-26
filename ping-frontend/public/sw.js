@@ -69,7 +69,9 @@ self.addEventListener("push", (event) => {
       // replaced by) the chat's message notifications.
       self.registration.getNotifications({ tag: data.tag || data.conversationId }),
     ]).then(([windows, shown]) => {
-      if (windows.some((w) => w.visibilityState === "visible")) return undefined;
+      // A test from Settings is shown even though Ping is open: that's the
+      // whole point of the test.
+      if (!data.force && windows.some((w) => w.visibilityState === "visible")) return undefined;
       // A tab left open in the background may have announced this very
       // message already. Showing it again would buzz twice for one message.
       if (data.messageId && shown.some((n) => n.data && n.data.messageId === data.messageId)) {
@@ -100,7 +102,8 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       const existing = windows.find((w) => new URL(w.url).origin === self.location.origin);
       if (existing) {
-        existing.postMessage({ type: "open-conversation", conversationId });
+        // A test notification has no chat to open; just bring Ping forward.
+        if (conversationId) existing.postMessage({ type: "open-conversation", conversationId });
         return existing.focus();
       }
       const target = conversationId ? "/chat?open=" + encodeURIComponent(conversationId) : "/chat";

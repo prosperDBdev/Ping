@@ -256,6 +256,18 @@ public class ConversationService {
         userRepository.findById(userId2)
                 .orElseThrow(() -> new NotFoundException("User not found"));
 
+        // Messaging yourself, like WhatsApp's "Message yourself": notes, links
+        // and files to keep. One participant, so nobody else is notified and
+        // nothing is ever unread.
+        if (userId1.equals(userId2)) {
+            return conversationRepository.findSelfConversation(userId1)
+                    .orElseGet(() -> conversationRepository.save(Conversation.builder()
+                            .type("PRIVATE")
+                            .participants(new ArrayList<>(List.of(userId1)))
+                            .unreadCount(new HashMap<>(Map.of(userId1, 0)))
+                            .build()));
+        }
+
         return conversationRepository.findPrivateConversation(userId1, userId2)
                 .orElseGet(() -> {
                     Map<String, Integer> unreadCount = new HashMap<>();

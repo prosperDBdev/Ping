@@ -38,6 +38,7 @@ import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { apiErrorMessage } from "@/lib/messages";
+import { chatName, chatPartner } from "@/lib/conversation";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { parseReplyQuote, snippetFor } from "@/lib/messageActions";
@@ -494,9 +495,7 @@ export default function ChatPage() {
     [activeConversation, user, createTask]
   );
 
-  const otherUser = activeConversation?.participants.find(
-    (p) => p.id !== user?.id
-  );
+  const otherUser = activeConversation ? chatPartner(activeConversation, user?.id) : undefined;
   const isGroupChat = activeConversation?.type === "GROUP";
 
   const formatDateLabel = (dateStr: string) => {
@@ -557,9 +556,7 @@ export default function ChatPage() {
 
   const filteredConversations = conversations.filter((conv) => {
     if (!searchQuery.trim()) return true;
-    const other = conv.participants.find((p) => p.id !== user?.id);
-    const name = conv.type === "GROUP" ? conv.name : other?.username;
-    return name?.toLowerCase().includes(searchQuery.toLowerCase());
+    return chatName(conv, user?.id).toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   // Temporary conversations get their own section in the list — kept visually

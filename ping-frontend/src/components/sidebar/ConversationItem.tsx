@@ -6,6 +6,7 @@ import { Conversation } from "@/types";
 import useAuthStore from "@/store/authStore";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
 import useLongPress from "@/hooks/useLongPress";
+import { chatName, chatPartner, isSelfChat } from "@/lib/conversation";
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -39,13 +40,11 @@ export default function ConversationItem({
   const isTemporary = conversation.temporary && conversation.expiresAt;
   const isGroup = conversation.type === "GROUP";
 
-  const otherUser = conversation.participants.find(
-    (p) => p.id !== currentUser?.id
-  );
+  const otherUser = chatPartner(conversation, currentUser?.id);
 
-  const displayName = isGroup ? conversation.name : otherUser?.username || "Unknown";
+  const displayName = chatName(conversation, currentUser?.id);
 
-  const isOnline = otherUser?.status === "ONLINE";
+  const isOnline = !isSelfChat(conversation) && otherUser?.status === "ONLINE";
 
   // A reply is stored as a JSON quote header on its first line, then the
   // message itself. The preview shows only the message, never the header.
@@ -107,7 +106,7 @@ export default function ConversationItem({
           </div>
         ) : (
           <Avatar
-            username={displayName}
+            username={otherUser?.username ?? displayName}
             avatarUrl={otherUser?.avatarUrl}
             className="w-10 h-10 shadow-xs"
             textClassName="text-xs"

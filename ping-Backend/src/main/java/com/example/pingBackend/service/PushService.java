@@ -201,6 +201,34 @@ public class PushService {
     }
 
     /**
+     * A test notification to every device of ONE user (Settings → "Send a test
+     * notification"), so they can see how Ping's notifications appear and
+     * whether their phone lets them pop up. `force` makes the phone show it
+     * even though Ping is open on screen, which is where the button is.
+     *
+     * @return how many devices it was sent to (0: this account has none yet)
+     */
+    public int sendTest(String userId) {
+        if (!enabled()) return 0;
+        List<PushSubscription> devices = repository.findByUserId(userId);
+        byte[] payload;
+        try {
+            payload = JSON.writeValueAsBytes(Map.of(
+                    "title", "Ping",
+                    "body", "This is how Ping notifications look 👋",
+                    "conversationId", "",
+                    "tag", "ping-test",
+                    "messageId", "ping-test-" + System.currentTimeMillis(),
+                    "force", true));
+        } catch (RuntimeException e) {
+            log.warn("Couldn't build a push payload: {}", e.getMessage());
+            return 0;
+        }
+        sender.execute(() -> devices.forEach(device -> deliver(device, payload)));
+        return devices.size();
+    }
+
+    /**
      * Queue a push to specific people: task added, task reminders. Returns
      * immediately. `tag` groups notifications on the phone (one per task),
      * separately from the chat's message notifications.

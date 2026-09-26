@@ -78,7 +78,11 @@ export default function NewConversationPanel({
     }
   };
 
-  const list = query.trim().length >= 2 ? results : suggestedUsers;
+  // You can find yourself to message yourself, but not add yourself to a
+  // group or invite yourself to a temporary chat.
+  const list = (query.trim().length >= 2 ? results : suggestedUsers).filter(
+    (u) => tab === "private" || u.id !== currentUser?.id
+  );
 
   const isSelected = (id: string) => selected.some((u) => u.id === id);
 
@@ -300,11 +304,16 @@ export default function NewConversationPanel({
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-ping-dark dark:text-ping-night-text text-sm truncate">
                           {u.username}
+                          {u.id === currentUser?.id && (
+                            <span className="font-semibold text-ping-text-light dark:text-ping-night-text-light"> (You)</span>
+                          )}
                         </p>
                         {/* The handle, not the email: other people's addresses are
                             no longer sent to the browser at all. */}
                         <p className="text-xs text-ping-text-light dark:text-ping-night-text-light truncate">
-                          @{u.username.toLowerCase().replace(/\s+/g, "")}
+                          {u.id === currentUser?.id
+                            ? "Message yourself"
+                            : `@${u.username.toLowerCase().replace(/\s+/g, "")}`}
                         </p>
                       </div>
 

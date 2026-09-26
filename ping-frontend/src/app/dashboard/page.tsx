@@ -2,6 +2,7 @@
 
 import Avatar from "@/components/common/Avatar";
 import { useEffect, useMemo, useState } from "react";
+import { chatName } from "@/lib/conversation";
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
@@ -89,9 +90,7 @@ export default function DashboardPage() {
     const q = search.toLowerCase();
     return sorted
       .filter((c) => {
-        const other = c.participants.find((p) => p.id !== user?.id);
-        const name = c.type === "GROUP" ? c.name : other?.username;
-        return name?.toLowerCase().includes(q);
+        return chatName(c, user?.id).toLowerCase().includes(q);
       })
       .slice(0, 6);
   }, [conversations, search, user?.id]);
@@ -331,7 +330,7 @@ export default function DashboardPage() {
                                 {task.title}
                               </p>
                               <p className="text-[11px] text-ping-text-light dark:text-ping-night-text-light truncate">
-                                {conv?.type === "GROUP" ? conv.name : conv?.participants.find((p) => p.id !== user?.id)?.username || "Conversation"}
+                                {conv ? chatName(conv, user?.id) : "Conversation"}
                                 {task.dueAt ? ` · ${formatDueDate(task.dueAt)}` : ""}
                               </p>
                             </div>
@@ -386,7 +385,7 @@ export default function DashboardPage() {
                           className="w-full flex items-center justify-between bg-white dark:bg-ping-night-card rounded-xl border border-ping-sand/60 dark:border-ping-night-border p-3.5 hover:border-ping-teal/40 transition"
                         >
                           <span className="text-sm font-semibold text-ping-dark dark:text-ping-night-text">
-                            {conv.participants.find((p) => p.id !== user?.id)?.username || "Conversation"}
+                            {chatName(conv, user?.id)}
                           </span>
                           {conv.expiresAt && <ExpiryBadge expiresAt={conv.expiresAt} size="sm" />}
                         </button>

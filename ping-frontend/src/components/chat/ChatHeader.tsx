@@ -8,6 +8,7 @@ import ChatMenu from "@/components/chat/ChatMenu";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { blockUser, clearConversation, unblockUser } from "@/lib/moderation";
 import useAuthStore from "@/store/authStore";
+import { chatName, chatPartner, isSelfChat } from "@/lib/conversation";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
 
 interface ChatHeaderProps {
@@ -53,13 +54,12 @@ export default function ChatHeader({
   const isTemporary = conversation.temporary && conversation.expiresAt;
   const isGroup = conversation.type === "GROUP";
 
-  const otherUser = conversation.participants.find(
-    (p) => p.id !== currentUser?.id
-  );
+  const self = isSelfChat(conversation);
+  const otherUser = chatPartner(conversation, currentUser?.id);
 
-  const displayName = isGroup ? conversation.name : otherUser?.username || "Unknown";
+  const displayName = chatName(conversation, currentUser?.id);
 
-  const isOnline = otherUser?.status === "ONLINE";
+  const isOnline = !self && otherUser?.status === "ONLINE";
 
   const avatarColors = ["bg-ping-orange", "bg-ping-teal", "bg-purple-400", "bg-yellow-500", "bg-blue-400"];
   const colorIndex = (displayName?.charCodeAt(0) || 0) % avatarColors.length;
@@ -74,6 +74,7 @@ export default function ChatHeader({
       const lastActive = mostRecent ? formatRelativeTime(new Date(mostRecent).toISOString()) : "recently";
       return `${conversation.participants.length} members · Last active ${lastActive}`;
     }
+    if (self) return "Message yourself";
     if (typingUser?.isTyping) return "typing...";
     if (isOnline) return "Online now";
     if (otherUser?.lastSeen) {
@@ -160,7 +161,7 @@ export default function ChatHeader({
             </div>
           ) : (
             <Avatar
-              username={displayName}
+              username={otherUser?.username ?? displayName}
               avatarUrl={otherUser?.avatarUrl}
               className="w-10 h-10 shadow-xs"
               textClassName="text-xs"
@@ -223,7 +224,8 @@ export default function ChatHeader({
 
           {menuOpen && (
             <ChatMenu
-              isGroup={isGroup}
+              // Nobody to block in your chat with yourself.
+              isGroup={isGroup || self}
               isBlocked={isBlocked}
               otherUsername={otherUser?.username}
               onViewMedia={() => onViewMedia?.()}

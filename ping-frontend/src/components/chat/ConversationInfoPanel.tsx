@@ -7,6 +7,7 @@ import { Conversation, User, WorkspaceSection } from "@/types";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { removeGroupMember } from "@/lib/moderation";
 import useAuthStore from "@/store/authStore";
+import { chatName, chatPartner, isSelfChat } from "@/lib/conversation";
 import useWorkspaceStore from "@/store/workspaceStore";
 import ExpiryBadge from "@/components/temporary/ExpiryBadge";
 import { colorFor } from "@/lib/avatar";
@@ -38,9 +39,13 @@ export default function ConversationInfoPanel({
     useWorkspaceStore();
 
   const isGroup = conversation.type === "GROUP";
-  const otherUser = conversation.participants.find((p) => p.id !== currentUser?.id);
-  const displayName = isGroup ? conversation.name : otherUser?.username || "Unknown";
-  const tagline = isGroup ? conversation.tagline || "A room for the unhurried." : otherUser?.status === "ONLINE" ? "Online now" : "Offline";
+  const otherUser = chatPartner(conversation, currentUser?.id);
+  const displayName = chatName(conversation, currentUser?.id);
+  const tagline = isGroup
+    ? conversation.tagline || "A room for the unhurried."
+    : isSelfChat(conversation)
+      ? "Notes, links and files for yourself"
+      : otherUser?.status === "ONLINE" ? "Online now" : "Offline";
 
   const isTemporary = conversation.temporary && conversation.expiresAt;
   const tasks = tasksByConversation[conversation.id] || [];
@@ -124,7 +129,7 @@ export default function ConversationInfoPanel({
           </div>
         ) : (
           <Avatar
-            username={displayName}
+            username={otherUser?.username ?? displayName}
             avatarUrl={otherUser?.avatarUrl}
             className="w-16 h-16 mb-3"
             textClassName="text-xl"

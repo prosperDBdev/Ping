@@ -23,6 +23,12 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
     @Query("{ 'type': 'PRIVATE', 'participants': { $all: [?0, ?1], $size: 2 }, 'temporary': { $ne: true } }")
     Optional<Conversation> findPrivateConversation(String userId1, String userId2);
 
+    // Your chat with yourself ("message yourself"): a private conversation whose
+    // participant list is exactly [you]. It can't go through the query above:
+    // $all [you, you] with $size 2 would match ANY private chat you're in.
+    @Query("{ 'type': 'PRIVATE', 'participants': [?0], 'temporary': { $ne: true } }")
+    Optional<Conversation> findSelfConversation(String userId);
+
     // Building block for the cleanup job — every temporary conversation whose
     // expiry is before the given cutoff. Scoped by `temporary = true` right
     // in the query itself, so it is structurally impossible for this method

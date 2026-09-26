@@ -10,6 +10,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import com.example.pingBackend.exception.TooManyRequestsException;
+import com.example.pingBackend.service.RateLimiter;
+import java.time.Duration;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PushController {
 
     private final PushService pushService;
+    private final RateLimiter rateLimiter;
 
     /** The server's public key, which the browser needs to subscribe. Null when push is off. */
     @GetMapping("/public-key")
@@ -39,6 +44,18 @@ public class PushController {
                                           @AuthenticationPrincipal User currentUser) {
         pushService.subscribe(currentUser.getId(), request.getEndpoint(), request.getP256dh(), request.getAuth());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Send yourself a test notification. Limited to 10 an hour: it's a way to
+     * check a phone's settings, not a way to make a phone buzz on demand.
+     */
+    @PostMapping("/test")
+    public Map<String, Object> test(@AuthenticationPrincipal User currentUser) {
+        if (!rateLimiter.tryAcquire("push-test:user:" + currentUser.getId(), 10, Duration.ofHours(1))) {
+            throw new TooManyRequestsException("You've sent a few tests already. Try again in a while.");
+        }
+        return Map.of("enabled", pushService.enabled(), "devices", pushService.sendTest(currentUser.getId()));
     }
 
     @DeleteMapping("/subscriptions")

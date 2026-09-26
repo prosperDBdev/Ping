@@ -10,6 +10,7 @@ import FeedbackSheet from "@/components/settings/FeedbackSheet";
 import InviteFriendsSection from "@/components/settings/InviteFriendsSection";
 import DevicesSection from "@/components/settings/DevicesSection";
 import TwoFactorSection from "@/components/settings/TwoFactorSection";
+import NotificationPopupHelp from "@/components/settings/NotificationPopupHelp";
 import Avatar from "@/components/common/Avatar";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import {
@@ -374,6 +375,7 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
                 </button>
               </div>
             )}
+            {notificationsOn && permission === "granted" && <NotificationPopupHelp />}
             {notificationsOn && permission === "denied" && (
               <p className="mt-3 px-1 text-xs text-ping-text-light dark:text-ping-night-text-light">
                 Notifications are blocked for Ping in this browser&apos;s site settings. You&apos;ll still get
