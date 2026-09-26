@@ -201,6 +201,29 @@ public class PushService {
     }
 
     /**
+     * Queue a push to specific people: task added, task reminders. Returns
+     * immediately. `tag` groups notifications on the phone (one per task),
+     * separately from the chat's message notifications.
+     */
+    public void notifyUsers(List<String> userIds, String title, String body, String conversationId, String tag) {
+        if (!enabled() || userIds.isEmpty()) return;
+        byte[] payload;
+        try {
+            payload = JSON.writeValueAsBytes(Map.of(
+                    "title", title,
+                    "body", body,
+                    "conversationId", conversationId,
+                    "tag", tag,
+                    "messageId", tag));
+        } catch (RuntimeException e) {
+            log.warn("Couldn't build a push payload: {}", e.getMessage());
+            return;
+        }
+        sender.execute(() -> userIds.forEach(userId ->
+                repository.findByUserId(userId).forEach(device -> deliver(device, payload))));
+    }
+
+    /**
      * Encrypt and send one push to one device.
      *
      * 404 or 410 from the push service means the subscription is gone (the

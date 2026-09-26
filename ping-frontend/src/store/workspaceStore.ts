@@ -7,8 +7,17 @@ import {
   Task,
   TaskAttachment,
 } from "@/types";
+import api from "@/lib/api";
+import { AxiosError } from "axios";
+import { isLegacyTaskId, LegacyTask, legacyToRequest, toTaskRequest } from "@/lib/tasks";
 
 /**
+ * TASKS ARE ON THE SERVER NOW. The task actions below call the API, so the
+ * whole chat shares one list and the server can send deadline reminders.
+ * Tasks made before that still sit in this browser's storage ("legacy" ids)
+ * until loadTasks uploads them. Events, pins and reactions below are still
+ * local, as described next.
+ *
  * Local-first workspace layer.
  *
  * The Ping backend currently only models Users, Conversations and
@@ -33,7 +42,7 @@ interface CreateTaskInput {
   title: string;
   description?: string;
   assigneeId?: string | null;
-  dueDate?: string | null;
+  dueAt?: string | null;
   priority?: Task["priority"];
   status?: Task["status"];
   attachments?: TaskAttachment[];
@@ -61,9 +70,16 @@ interface WorkspaceState {
   pinsByConversation: Record<string, PinnedItem[]>;
   reactionsByMessage: Record<string, MessageReaction[]>;
 
-  createTask: (input: CreateTaskInput) => Task;
-  updateTask: (conversationId: string, taskId: string, patch: Partial<Task>) => void;
-  deleteTask: (conversationId: string, taskId: string) => void;
+  /** Load a chat's tasks from the server (uploading any from before tasks were shared). */
+  loadTasks: (conversationId: string) => Promise<void>;
+  /** Every task you can see, for Home. */
+  loadMyTasks: () => Promise<void>;
+  createTask: (input: CreateTaskInput) => Promise<Task>;
+  /** Applied straight away; put back if the server refuses (then it throws). */
+  updateTask: (conversationId: string, taskId: string, patch: Partial<Task>) => Promise<void>;
+  deleteTask: (conversationId: string, taskId: string) => Promise<void>;
+  /** A change someone made, arriving over the live connection. */
+  applyTaskEvent: (event: TaskEvent) => void;
 
   createEvent: (input: CreateEventInput) => CalendarEvent;
   deleteEvent: (conversationId: string, eventId: string) => void;
@@ -83,6 +99,13 @@ interface WorkspaceState {
   allEvents: () => CalendarEvent[];
 }
 
+export type TaskEvent =
+  | { type: "upsert"; task: Task }
+  | { type: "delete"; taskId: string; conversationId: string };
+
+const withTask = (list: Task[], task: Task) =>
+  list.some((t) => t.id === task.id) ? list.map((t) => (t.id === task.id ? task : t)) : [task, ...list];
+
 const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
@@ -91,59 +114,98 @@ const useWorkspaceStore = create<WorkspaceState>()(
       pinsByConversation: {},
       reactionsByMessage: {},
 
-      createTask: (input) => {
-        const now = new Date().toISOString();
-        const task: Task = {
-          id: genId(),
-          conversationId: input.conversationId,
+      loadTasks: async (conversationId) => {
+        // First, upload anything made before tasks were shared. It stays
+        // private to you (see legacyToRequest). A chat you've since left or
+        // that expired can't take it any more, so it's dropped; anything else
+        // (offline) stays here and is tried again next time.
+        const legacy = (get().tasksByConversation[conversationId] || []).filter((t) => isLegacyTaskId(t.id));
+        for (const task of legacy) {
+          try {
+            await api.post(`/conversations/${conversationId}/tasks`, legacyToRequest(task as LegacyTask));
+          } catch (err) {
+            const status = (err as AxiosError).response?.status;
+            if (status !== 403 && status !== 404 && status !== 410) continue;
+          }
+          set((state) => ({
+            tasksByConversation: {
+              ...state.tasksByConversation,
+              [conversationId]: (state.tasksByConversation[conversationId] || []).filter((t) => t.id !== task.id),
+            },
+          }));
+        }
+
+        const res = await api.get(`/conversations/${conversationId}/tasks`);
+        set((state) => ({
+          tasksByConversation: { ...state.tasksByConversation, [conversationId]: res.data as Task[] },
+        }));
+      },
+
+      loadMyTasks: async () => {
+        const res = await api.get("/tasks/mine");
+        const grouped: Record<string, Task[]> = {};
+        (res.data as Task[]).forEach((t) => {
+          (grouped[t.conversationId] ||= []).push(t);
+        });
+        // Keep any not-yet-uploaded ones; they're uploaded when their chat opens.
+        Object.entries(get().tasksByConversation).forEach(([cid, list]) => {
+          const legacy = list.filter((t) => isLegacyTaskId(t.id));
+          if (legacy.length) grouped[cid] = [...legacy, ...(grouped[cid] || [])];
+        });
+        set({ tasksByConversation: grouped });
+      },
+
+      createTask: async (input) => {
+        const res = await api.post(`/conversations/${input.conversationId}/tasks`, {
           title: input.title,
           description: input.description || "",
           assigneeId: input.assigneeId ?? null,
-          dueDate: input.dueDate ?? null,
+          dueAt: input.dueAt ?? null,
           priority: input.priority || "MEDIUM",
           status: input.status || "TODO",
-          attachments: input.attachments || [],
           isReminder: input.isReminder || false,
           sourceMessageId: input.sourceMessageId ?? null,
           sourceMessageSnippet: input.sourceMessageSnippet ?? null,
-          createdBy: input.createdBy,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({
-          tasksByConversation: {
-            ...state.tasksByConversation,
-            [input.conversationId]: [
-              task,
-              ...(state.tasksByConversation[input.conversationId] || []),
-            ],
-          },
-        }));
+          attachments: input.attachments || [],
+        });
+        const task = res.data as Task;
+        get().applyTaskEvent({ type: "upsert", task });
         return task;
       },
 
-      updateTask: (conversationId, taskId, patch) => {
-        set((state) => ({
-          tasksByConversation: {
-            ...state.tasksByConversation,
-            [conversationId]: (state.tasksByConversation[conversationId] || []).map((t) =>
-              t.id === taskId
-                ? { ...t, ...patch, updatedAt: new Date().toISOString() }
-                : t
-            ),
-          },
-        }));
+      updateTask: async (conversationId, taskId, patch) => {
+        const before = (get().tasksByConversation[conversationId] || []).find((t) => t.id === taskId);
+        if (!before) return;
+        const next = { ...before, ...patch };
+        get().applyTaskEvent({ type: "upsert", task: next });
+        try {
+          const res = await api.put(`/conversations/${conversationId}/tasks/${taskId}`, toTaskRequest(next));
+          get().applyTaskEvent({ type: "upsert", task: res.data as Task });
+        } catch (err) {
+          get().applyTaskEvent({ type: "upsert", task: before });
+          throw err;
+        }
       },
 
-      deleteTask: (conversationId, taskId) => {
-        set((state) => ({
-          tasksByConversation: {
-            ...state.tasksByConversation,
-            [conversationId]: (state.tasksByConversation[conversationId] || []).filter(
-              (t) => t.id !== taskId
-            ),
-          },
-        }));
+      deleteTask: async (conversationId, taskId) => {
+        const before = (get().tasksByConversation[conversationId] || []).find((t) => t.id === taskId);
+        get().applyTaskEvent({ type: "delete", taskId, conversationId });
+        try {
+          await api.delete(`/conversations/${conversationId}/tasks/${taskId}`);
+        } catch (err) {
+          if (before) get().applyTaskEvent({ type: "upsert", task: before });
+          throw err;
+        }
+      },
+
+      applyTaskEvent: (event) => {
+        set((state) => {
+          const cid = event.type === "upsert" ? event.task.conversationId : event.conversationId;
+          const list = state.tasksByConversation[cid] || [];
+          const next =
+            event.type === "upsert" ? withTask(list, event.task) : list.filter((t) => t.id !== event.taskId);
+          return { tasksByConversation: { ...state.tasksByConversation, [cid]: next } };
+        });
       },
 
       createEvent: (input) => {
@@ -240,7 +302,21 @@ const useWorkspaceStore = create<WorkspaceState>()(
       allTasks: () => Object.values(get().tasksByConversation).flat(),
       allEvents: () => Object.values(get().eventsByConversation).flat(),
     }),
-    { name: "ping-workspace" }
+    {
+      name: "ping-workspace",
+      // Shared tasks come from the server on every visit and aren't kept in
+      // this browser: on a shared computer, the next person to sign in must
+      // not find the last person's task list here. Only tasks not yet
+      // uploaded are kept, so they survive until they are.
+      partialize: (state) => ({
+        ...state,
+        tasksByConversation: Object.fromEntries(
+          Object.entries(state.tasksByConversation)
+            .map(([cid, list]) => [cid, list.filter((t) => isLegacyTaskId(t.id))] as const)
+            .filter(([, list]) => list.length > 0)
+        ),
+      }),
+    }
   )
 );
 

@@ -130,7 +130,8 @@ export interface Task {
   title: string;
   description: string;
   assigneeId: string | null;
-  dueDate: string | null; // ISO date, no time component
+  /** When it's due: an exact moment ("…Z"), shown in the viewer's own time. */
+  dueAt: string | null;
   priority: TaskPriority;
   status: TaskStatus;
   attachments: TaskAttachment[];

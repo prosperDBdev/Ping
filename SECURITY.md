@@ -234,6 +234,11 @@ forge a new IP per request.
   can't be edited or reacted to.
 - **Delete for me** hides a message from the caller only, and is filtered in
   the history query itself. Who has hidden what is never returned by the API.
+- **Tasks** are visible to a conversation's participants only; personal
+  reminders only to their creator (to anyone else they return 404 and are
+  never broadcast on the conversation topic). Assignees must be participants.
+  Only a task's creator or the group admin can delete it. Reminder sends are
+  claimed atomically, so each goes out once.
 - **Deleting a chat** from your chat list is per user and participants only:
   it hides the conversation from your list and clears it for you, in one
   atomic update of your own fields. Nothing is deleted, and the other

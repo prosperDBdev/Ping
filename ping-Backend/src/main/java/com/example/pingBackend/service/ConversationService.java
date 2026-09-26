@@ -370,7 +370,7 @@ public class ConversationService {
         return mapToResponse(conversation, userId);
     }
 
-    static boolean isExpired(Conversation conversation, LocalDateTime now) {
+    public static boolean isExpired(Conversation conversation, LocalDateTime now) {
         return conversation.isTemporary()
                 && conversation.getExpiresAt() != null
                 && conversation.getExpiresAt().isBefore(now);

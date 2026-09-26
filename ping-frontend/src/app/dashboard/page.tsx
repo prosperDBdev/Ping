@@ -1,7 +1,7 @@
 "use client";
 
 import Avatar from "@/components/common/Avatar";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
@@ -49,7 +49,11 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const { conversations, isLoadingConversations, conversationsFailed, fetchConversations, setActiveConversation } =
     useChatStore();
-  const { allTasks, allEvents } = useWorkspaceStore();
+  const { allTasks, allEvents, loadMyTasks } = useWorkspaceStore();
+  // Tasks live on the server now: load everything you can see, across chats.
+  useEffect(() => {
+    loadMyTasks().catch(() => {});
+  }, [loadMyTasks]);
 
   const [search, setSearch] = useState("");
 
@@ -328,7 +332,7 @@ export default function DashboardPage() {
                               </p>
                               <p className="text-[11px] text-ping-text-light dark:text-ping-night-text-light truncate">
                                 {conv?.type === "GROUP" ? conv.name : conv?.participants.find((p) => p.id !== user?.id)?.username || "Conversation"}
-                                {task.dueDate ? ` · ${formatDueDate(task.dueDate)}` : ""}
+                                {task.dueAt ? ` · ${formatDueDate(task.dueAt)}` : ""}
                               </p>
                             </div>
                           </button>

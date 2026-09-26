@@ -7,6 +7,8 @@ import useAuthStore from "@/store/authStore";
 import useChatStore from "@/store/chatStore";
 import { DELETED_PREVIEW } from "@/lib/messages";
 import api from "@/lib/api";
+import toast from "react-hot-toast";
+import useWorkspaceStore, { TaskEvent } from "@/store/workspaceStore";
 import {
   Conversation,
   Message,
@@ -92,6 +94,22 @@ export default function useWebSocket() {
         }
       );
       subscriptionsRef.current.set("conversation-created", createdSub);
+
+      // Your personal reminders changing (on another of your devices).
+      const myTasksSub = client.subscribe(`/topic/user/${user.id}/tasks`, (frame) => {
+        useWorkspaceStore.getState().applyTaskEvent(JSON.parse(frame.body) as TaskEvent);
+      });
+      subscriptionsRef.current.set("my-tasks", myTasksSub);
+
+      // A task deadline reminder. With Ping open and on screen, show it here;
+      // otherwise the push notification on the phone does it (the service
+      // worker skips it while Ping is visible, so it never shows twice).
+      const remindersSub = client.subscribe(`/topic/user/${user.id}/reminders`, (frame) => {
+        if (document.visibilityState !== "visible") return;
+        const r: { title: string; body: string } = JSON.parse(frame.body);
+        toast(`${r.title}\n${r.body}`, { duration: 10000, style: { whiteSpace: "pre-line" } });
+      });
+      subscriptionsRef.current.set("reminders", remindersSub);
 
       // Every message in every conversation this user is part of, regardless
       // of which chat is on screen. This is what keeps the sidebar honest:
@@ -219,6 +237,12 @@ export default function useWebSocket() {
       }
     );
     conversationSubsRef.current.set("read", readSub);
+
+    // Tasks added, edited, ticked off or deleted by anyone in this chat.
+    const tasksSub = client.subscribe(`/topic/conversation/${convId}/tasks`, (frame) => {
+      useWorkspaceStore.getState().applyTaskEvent(JSON.parse(frame.body) as TaskEvent);
+    });
+    conversationSubsRef.current.set("tasks", tasksSub);
 
     return () => {
       conversationSubsRef.current.forEach((sub) => sub.unsubscribe());

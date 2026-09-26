@@ -37,6 +37,7 @@ import { fetchPendingTemporaryChatInvites } from "@/lib/temporaryChat";
 import { blockUser, fetchBlockedUsers } from "@/lib/moderation";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { apiErrorMessage } from "@/lib/messages";
 import PingLogo from "@/components/common/PingLogo";
 import ThemeToggle from "@/components/common/ThemeToggle";
 import { parseReplyQuote, snippetFor } from "@/lib/messageActions";
@@ -477,7 +478,7 @@ export default function ChatPage() {
     (message: Message) => {
       if (!activeConversation || !user) return;
       const { body } = parseReplyQuote(message.content);
-      createTask({
+      void createTask({
         conversationId: activeConversation.id,
         title: snippetFor(body, 60),
         isReminder: true,
@@ -486,8 +487,9 @@ export default function ChatPage() {
         sourceMessageId: message.id,
         sourceMessageSnippet: snippetFor(body),
         createdBy: user.id,
-      });
-      toast.success("Reminder added to Tasks");
+      })
+        .then(() => toast.success("Reminder added to Tasks. Only you can see it; set a time to be reminded."))
+        .catch((err) => toast.error(apiErrorMessage(err, "Couldn't add the reminder")));
     },
     [activeConversation, user, createTask]
   );

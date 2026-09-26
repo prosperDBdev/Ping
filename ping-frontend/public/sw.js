@@ -65,7 +65,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.matchAll({ type: "window", includeUncontrolled: true }),
-      self.registration.getNotifications({ tag: data.conversationId }),
+      // Task reminders carry their own tag, so they don't replace (or get
+      // replaced by) the chat's message notifications.
+      self.registration.getNotifications({ tag: data.tag || data.conversationId }),
     ]).then(([windows, shown]) => {
       if (windows.some((w) => w.visibilityState === "visible")) return undefined;
       // A tab left open in the background may have announced this very
@@ -75,7 +77,7 @@ self.addEventListener("push", (event) => {
       }
       return self.registration.showNotification(data.title || "Ping", {
         body: data.body || "New message",
-        tag: data.conversationId,
+        tag: data.tag || data.conversationId,
         renotify: true,
         silent: false,
         vibrate: [200, 100, 200],

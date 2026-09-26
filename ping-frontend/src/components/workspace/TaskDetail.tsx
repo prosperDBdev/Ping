@@ -8,6 +8,7 @@ import useWorkspaceStore from "@/store/workspaceStore";
 import { Task, User } from "@/types";
 import { PRIORITY_META, STATUS_META, TASK_STATUSES } from "@/lib/taskMeta";
 import { formatDueDate, formatFileSize, isOverdue } from "@/lib/time";
+import { apiErrorMessage } from "@/lib/messages";
 import { colorFor, initialsFor } from "@/lib/avatar";
 
 interface TaskDetailProps {
@@ -33,13 +34,17 @@ export default function TaskDetail({
 
   const assignee = participants.find((p) => p.id === task.assigneeId);
   const priority = PRIORITY_META[task.priority];
-  const overdue = isOverdue(task.dueDate, task.status);
+  const overdue = isOverdue(task.dueAt, task.status);
 
-  const handleDelete = () => {
-    deleteTask(conversationId, task.id);
-    toast.success("Task deleted");
+  const handleDelete = async () => {
     setConfirmingDelete(false);
     onClose();
+    try {
+      await deleteTask(conversationId, task.id);
+      toast.success("Task deleted");
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't delete that task"));
+    }
   };
 
   return (
@@ -93,7 +98,7 @@ export default function TaskDetail({
                 {priority.label} priority
               </span>
             )}
-            {task.dueDate && (
+            {task.dueAt && (
               <span
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
                   overdue
@@ -102,7 +107,7 @@ export default function TaskDetail({
                 }`}
               >
                 {overdue ? "Overdue · " : "Due "}
-                {formatDueDate(task.dueDate)}
+                {formatDueDate(task.dueAt)}
               </span>
             )}
           </div>
@@ -124,7 +129,11 @@ export default function TaskDetail({
                 return (
                   <button
                     key={s}
-                    onClick={() => updateTask(conversationId, task.id, { status: s })}
+                    onClick={() =>
+                      updateTask(conversationId, task.id, { status: s }).catch((err) =>
+                        toast.error(apiErrorMessage(err, "Couldn't update that task"))
+                      )
+                    }
                     className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
                       active
                         ? `${meta.bg} ${meta.text} border-transparent`

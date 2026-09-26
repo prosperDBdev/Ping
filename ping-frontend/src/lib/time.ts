@@ -11,30 +11,38 @@ export function formatCountdown(msRemaining: number): string {
   return "<1m";
 }
 
-export function formatDueDate(dateStr: string | null): string {
-  if (!dateStr) return "No due date";
-  const date = new Date(dateStr + "T00:00:00");
+/**
+ * A task's due moment in this phone's own time: "Today, 17:00",
+ * "Tomorrow, 09:00", "Friday, 14:30", "3 Oct, 09:00".
+ */
+export function formatDueDate(dueAt: string | null): string {
+  if (!dueAt) return "No due date";
+  const date = new Date(dueAt);
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((date.getTime() - today.getTime()) / 86400000);
+  const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Tomorrow";
-  if (diffDays === -1) return "Yesterday";
-  if (diffDays > 1 && diffDays < 7)
-    return date.toLocaleDateString([], { weekday: "long" });
-
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-  });
+  let label: string;
+  if (diffDays === 0) label = "Today";
+  else if (diffDays === 1) label = "Tomorrow";
+  else if (diffDays === -1) label = "Yesterday";
+  else if (diffDays > 1 && diffDays < 7) label = date.toLocaleDateString([], { weekday: "long" });
+  else
+    label = date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+    });
+  return `${label}, ${time}`;
 }
 
-export function isOverdue(dateStr: string | null, status: string): boolean {
-  if (!dateStr || status === "COMPLETED") return false;
-  const date = new Date(dateStr + "T23:59:59");
-  return date.getTime() < Date.now();
+/** Past its due moment and not done. */
+export function isOverdue(dueAt: string | null, status: string): boolean {
+  if (!dueAt || status === "COMPLETED") return false;
+  return new Date(dueAt).getTime() < Date.now();
 }
 
 export function formatEventDate(dateStr: string): string {

@@ -13,7 +13,7 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, assignee, onClick, onToggleComplete }: TaskCardProps) {
-  const overdue = isOverdue(task.dueDate, task.status);
+  const overdue = isOverdue(task.dueAt, task.status);
   const priority = PRIORITY_META[task.priority];
   const status = STATUS_META[task.status];
   const isDone = task.status === "COMPLETED";
@@ -76,7 +76,7 @@ export default function TaskCard({ task, assignee, onClick, onToggleComplete }: 
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${status.bg} ${status.text}`}>
               {status.label}
             </span>
-            {task.dueDate && (
+            {task.dueAt && (
               <span
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                   overdue
@@ -85,7 +85,7 @@ export default function TaskCard({ task, assignee, onClick, onToggleComplete }: 
                 }`}
               >
                 {overdue ? "Overdue · " : ""}
-                {formatDueDate(task.dueDate)}
+                {formatDueDate(task.dueAt)}
               </span>
             )}
           </div>

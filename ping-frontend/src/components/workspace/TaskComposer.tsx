@@ -9,6 +9,8 @@ import { Task, TaskAttachment, TaskPriority, TaskStatus, User } from "@/types";
 import { PRIORITY_META, STATUS_META, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/taskMeta";
 import { initialsFor, colorFor } from "@/lib/avatar";
 import { formatFileSize } from "@/lib/time";
+import { isoToLocalDue, localDueToIso } from "@/lib/tasks";
+import { apiErrorMessage } from "@/lib/messages";
 
 interface TaskComposerProps {
   open: boolean;
@@ -44,7 +46,10 @@ export default function TaskComposer({
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [assigneeId, setAssigneeId] = useState<string | null>(task?.assigneeId ?? user?.id ?? null);
-  const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
+  // Shown and picked in this phone's own time; sent as an exact moment.
+  const [dueDate, setDueDate] = useState(() => isoToLocalDue(task?.dueAt ?? null).date);
+  const [dueTime, setDueTime] = useState(() => isoToLocalDue(task?.dueAt ?? null).time);
+  const [saving, setSaving] = useState(false);
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "MEDIUM");
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? "TODO");
   const [attachments, setAttachments] = useState<TaskAttachment[]>(task?.attachments ?? []);
@@ -64,40 +69,51 @@ export default function TaskComposer({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const handleSubmit = () => {
-    if (!title.trim() || !user) return;
-
-    if (task) {
-      const patch = {
-        title: title.trim(),
-        description: description.trim(),
-        assigneeId,
-        dueDate: dueDate || null,
-        priority,
-        status,
-        attachments,
-      };
-      updateTask(conversationId, task.id, patch);
-      toast.success("Task updated");
-      onSaved?.({ ...task, ...patch });
-    } else {
-      const created = createTask({
-        conversationId,
-        title: title.trim(),
-        description: description.trim(),
-        assigneeId,
-        dueDate: dueDate || null,
-        priority,
-        status,
-        attachments,
-        sourceMessageId: sourceMessage?.id ?? null,
-        sourceMessageSnippet: sourceMessage?.snippet ?? null,
-        createdBy: user.id,
-      });
-      toast.success("Task created");
-      onSaved?.(created);
+  const handleSubmit = async () => {
+    if (!title.trim() || !user || saving) return;
+    const dueAt = localDueToIso(dueDate, dueTime);
+    if (dueAt && !task && new Date(dueAt).getTime() < Date.now()) {
+      toast.error("That time has already passed. Pick a later one.");
+      return;
     }
-    onClose();
+    setSaving(true);
+    try {
+      if (task) {
+        const patch = {
+          title: title.trim(),
+          description: description.trim(),
+          assigneeId,
+          dueAt,
+          priority,
+          status,
+          attachments,
+        };
+        await updateTask(conversationId, task.id, patch);
+        toast.success("Task updated");
+        onSaved?.({ ...task, ...patch });
+      } else {
+        const created = await createTask({
+          conversationId,
+          title: title.trim(),
+          description: description.trim(),
+          assigneeId,
+          dueAt,
+          priority,
+          status,
+          attachments,
+          sourceMessageId: sourceMessage?.id ?? null,
+          sourceMessageSnippet: sourceMessage?.snippet ?? null,
+          createdBy: user.id,
+        });
+        toast.success(dueAt ? "Task created. We'll remind you before it's due." : "Task created");
+        onSaved?.(created);
+      }
+      onClose();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't save the task. Try again."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -115,8 +131,8 @@ export default function TaskComposer({
             Cancel
           </button>
           <button
-            onClick={handleSubmit}
-            disabled={!title.trim()}
+            onClick={() => void handleSubmit()}
+            disabled={!title.trim() || saving}
             className="flex-1 py-2.5 rounded-xl bg-ping-dark dark:bg-ping-orange text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {task ? "Save changes" : "Create task"}
@@ -163,17 +179,40 @@ export default function TaskComposer({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-ping-dark dark:text-ping-night-text mb-1.5">
+            <label htmlFor="task-due-date" className="block text-xs font-semibold text-ping-dark dark:text-ping-night-text mb-1.5">
               Due date
             </label>
             <input
+              id="task-due-date"
               type="date"
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={(e) => {
+                setDueDate(e.target.value);
+                if (e.target.value && !dueTime) setDueTime("09:00");
+              }}
               className="w-full px-3.5 py-2.5 bg-white dark:bg-ping-night-card border border-ping-sand dark:border-ping-night-border rounded-xl text-sm text-ping-dark dark:text-ping-night-text focus:outline-none focus:ring-2 focus:ring-ping-teal/30 focus:border-ping-teal transition"
             />
           </div>
           <div>
+            <label htmlFor="task-due-time" className="block text-xs font-semibold text-ping-dark dark:text-ping-night-text mb-1.5">
+              Time
+            </label>
+            <input
+              id="task-due-time"
+              type="time"
+              value={dueTime}
+              disabled={!dueDate}
+              onChange={(e) => setDueTime(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-white dark:bg-ping-night-card border border-ping-sand dark:border-ping-night-border rounded-xl text-sm text-ping-dark dark:text-ping-night-text focus:outline-none focus:ring-2 focus:ring-ping-teal/30 focus:border-ping-teal transition disabled:opacity-50"
+            />
+          </div>
+          {dueDate && (
+            <p className="col-span-2 -mt-2 text-[11px] text-ping-text-light dark:text-ping-night-text-light">
+              🔔 Reminders go out a day before, an hour before, and when it&apos;s due, even if Ping is closed.
+              They go to whoever it&apos;s assigned to, or to everyone in the chat if nobody is.
+            </p>
+          )}
+          <div className="col-span-2">
             <label className="block text-xs font-semibold text-ping-dark dark:text-ping-night-text mb-1.5">
               Assigned to
             </label>

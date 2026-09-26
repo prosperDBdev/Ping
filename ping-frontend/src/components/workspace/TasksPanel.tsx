@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { apiErrorMessage } from "@/lib/messages";
 import { Conversation, Task, TaskStatus } from "@/types";
 import useWorkspaceStore from "@/store/workspaceStore";
 import TaskCard from "@/components/workspace/TaskCard";
@@ -23,8 +25,14 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function TasksPanel({ conversation, onJumpToMessage }: TasksPanelProps) {
-  const { tasksByConversation, updateTask } = useWorkspaceStore();
+  const { tasksByConversation, updateTask, loadTasks } = useWorkspaceStore();
   const tasks = tasksByConversation[conversation.id] || [];
+
+  // Fresh from the server each time the tab opens; changes made by others
+  // while it's open arrive live (useWebSocket → applyTaskEvent).
+  useEffect(() => {
+    loadTasks(conversation.id).catch(() => toast.error("Couldn't load tasks. Check your connection."));
+  }, [conversation.id, loadTasks]);
 
   const [filter, setFilter] = useState<Filter>("ALL");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -109,7 +117,7 @@ export default function TasksPanel({ conversation, onJumpToMessage }: TasksPanel
                 onToggleComplete={() =>
                   updateTask(conversation.id, task.id, {
                     status: task.status === "COMPLETED" ? "TODO" : "COMPLETED",
-                  })
+                  }).catch((err) => toast.error(apiErrorMessage(err, "Couldn't update that task")))
                 }
               />
             ))}

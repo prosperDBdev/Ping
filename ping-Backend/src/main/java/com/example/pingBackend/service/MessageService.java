@@ -475,7 +475,7 @@ public class MessageService {
     }
 
     /** You're in this conversation and it hasn't expired. */
-    private Conversation requireParticipant(String conversationId, String userId) {
+    Conversation requireParticipant(String conversationId, String userId) {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
         if (!conversation.getParticipants().contains(userId)) {
@@ -493,7 +493,7 @@ public class MessageService {
      * blocked the other. The same rules as sending a message, so reacting and
      * editing can't be used to reach someone sending couldn't.
      */
-    private Conversation requireWritableConversation(String conversationId, String userId) {
+    Conversation requireWritableConversation(String conversationId, String userId) {
         Conversation conversation = requireParticipant(conversationId, userId);
         if ("PRIVATE".equals(conversation.getType())) {
             conversation.getParticipants().stream()
