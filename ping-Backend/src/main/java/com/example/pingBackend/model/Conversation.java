@@ -8,6 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,53 @@ public class Conversation {
 
     // Group-only fields
     private String name;   // null for PRIVATE
+
+    /**
+     * The group's owner: the person who created it. Kept separately from
+     * `admins` because they alone can't be removed, can't be demoted, and
+     * can't leave without handing the group on. A group therefore always has
+     * somebody who can manage it, however many admins come and go.
+     */
     private String admin;  // null for PRIVATE
+
+    /**
+     * Extra admins, beyond the owner. The full set of people who can add and
+     * remove members is {admin} plus this list.
+     *
+     * A list, not a second field, because WhatsApp lets you promote several
+     * people: one class rep going away shouldn't freeze a group of 200.
+     * Documents written before this existed have no such field and still work:
+     * their only admin is the owner.
+     */
+    @Builder.Default
+    private List<String> admins = new ArrayList<>();
+
+    /**
+     * Who may add people to this group: ADMINS_ONLY (the default) or EVERYONE,
+     * as in WhatsApp's "Who can add participants" setting.
+     *
+     * Boxed, and read as ADMINS_ONLY whenever it's missing, so every group
+     * created before this existed starts out admin-only rather than silently
+     * becoming open to anyone.
+     */
+    private String addMembersBy;
+
+    /** True when anyone in the group (not just admins) may add people. */
+    public boolean everyoneCanAddMembers() {
+        return "EVERYONE".equals(addMembersBy);
+    }
+
+    /** The owner plus the promoted admins. */
+    public List<String> adminIds() {
+        List<String> ids = new ArrayList<>();
+        if (admin != null) ids.add(admin);
+        if (admins != null) admins.stream().filter(id -> !ids.contains(id)).forEach(ids::add);
+        return ids;
+    }
+
+    public boolean isAdmin(String userId) {
+        return userId != null && adminIds().contains(userId);
+    }
 
     // Last message preview (for conversation list)
     private LastMessage lastMessage;

@@ -103,15 +103,4 @@ public class ConversationController {
         conversationService.deleteForMe(id, currentUser.getId());
         return ResponseEntity.noContent().build();
     }
-
-    /** Remove a member from a group. Admin only — enforced in the service. */
-    @DeleteMapping("/{id}/participants/{userId}")
-    public ResponseEntity<Void> removeParticipant(
-            @PathVariable String id,
-            @PathVariable String userId,
-            @AuthenticationPrincipal User currentUser
-    ) {
-        conversationService.removeParticipant(id, currentUser.getId(), userId);
-        return ResponseEntity.noContent().build();
-    }
 }

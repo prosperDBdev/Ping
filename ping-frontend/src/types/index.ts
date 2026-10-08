@@ -29,7 +29,15 @@ export interface Conversation {
   type: string;
   participants: User[];
   name: string | null;
+  /**
+   * Everyone who can add and remove members, the group's owner first.
+   * The owner alone can't be removed, can't be demoted, and can't leave.
+   * This is the whole permission model: you're an admin if you're in this list.
+   */
+  admins?: string[];
   admin?: string | null;
+  /** ADMINS_ONLY (the default) or EVERYONE — who may add people. */
+  addMembersBy?: "ADMINS_ONLY" | "EVERYONE";
   description?: string | null;
   tagline?: string | null;
   lastMessage: LastMessage | null;

@@ -3,9 +3,13 @@
 import Avatar from "@/components/common/Avatar";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { apiErrorMessage } from "@/lib/messages";
 import { Conversation, User, WorkspaceSection } from "@/types";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { removeGroupMember } from "@/lib/moderation";
+import { canAddMembers, groupOwnerId, isGroupAdmin, leaveGroup, setGroupAdmin, setWhoCanAdd } from "@/lib/groups";
+import AddParticipantsSheet from "@/components/chat/AddParticipantsSheet";
+import GroupInvitePanel from "@/components/chat/GroupInvitePanel";
 import useAuthStore from "@/store/authStore";
 import { chatName, chatPartner, isSelfChat } from "@/lib/conversation";
 import useWorkspaceStore from "@/store/workspaceStore";
@@ -34,7 +38,16 @@ export default function ConversationInfoPanel({
   const { user: currentUser } = useAuthStore();
   const [removingMember, setRemovingMember] = useState<User | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
-  const isAdmin = conversation.type === "GROUP" && conversation.admin === currentUser?.id;
+  // The server sends the full admin list, so the app can finally tell who is
+  // one. It used to send a single `admin` id that the app never received, which
+  // is why the admin-only buttons had never appeared for anyone.
+  const isAdmin = isGroupAdmin(conversation, currentUser?.id);
+  const ownerId = groupOwnerId(conversation);
+  const mayAdd = canAddMembers(conversation, currentUser?.id);
+  const everyoneCanAdd = conversation.addMembersBy === "EVERYONE";
+  const [addingMembers, setAddingMembers] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const { tasksByConversation, eventsByConversation, pinsByConversation } =
     useWorkspaceStore();
 
@@ -95,6 +108,40 @@ export default function ConversationInfoPanel({
       ),
     },
   ];
+
+  const handleLeave = async () => {
+    setLeaving(true);
+    try {
+      await leaveGroup(conversation.id);
+      toast.success(`You left "${conversation.name}"`);
+      setConfirmingLeave(false);
+      onMemberRemoved?.();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't leave the group"));
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const changeWhoCanAdd = async () => {
+    try {
+      await setWhoCanAdd(conversation.id, everyoneCanAdd ? "ADMINS_ONLY" : "EVERYONE");
+      onMemberRemoved?.();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't change that setting"));
+    }
+  };
+
+  const toggleAdmin = async (member: User) => {
+    const making = !isGroupAdmin(conversation, member.id);
+    try {
+      await setGroupAdmin(conversation.id, member.id, making);
+      toast.success(making ? `${member.username} is now an admin` : `${member.username} is no longer an admin`);
+      onMemberRemoved?.();
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Couldn't change that admin"));
+    }
+  };
 
   return (
     // Phones: a full-screen panel over the chat. It used to be "hidden md:flex",
@@ -179,6 +226,17 @@ export default function ConversationInfoPanel({
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light mb-3">
           Members · {conversation.participants.length}
         </p>
+        {mayAdd && (
+          <button
+            onClick={() => setAddingMembers(true)}
+            className="w-full mb-3 py-2.5 rounded-xl border border-ping-sand dark:border-ping-night-border text-xs font-bold text-ping-teal dark:text-ping-teal-light hover:bg-ping-cream dark:hover:bg-ping-night-card-active transition flex items-center justify-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add participants
+          </button>
+        )}
         <div className="space-y-3">
           {conversation.participants.map((p) => (
             <div key={p.id}>
@@ -206,27 +264,77 @@ export default function ConversationInfoPanel({
                 {p.username}
                 {p.id === currentUser?.id ? " (you)" : ""}
               </button>
-              {conversation.admin === p.id && (
+              {conversation.admins?.includes(p.id) && (
                 <span className="text-[9px] font-bold uppercase tracking-wide text-ping-teal dark:text-ping-teal-light bg-ping-sage dark:bg-ping-night-sage px-2 py-0.5 rounded-full flex-shrink-0">
-                  Admin
+                  {p.id === ownerId ? "Owner" : "Admin"}
                 </span>
               )}
-              {/* Only shown to the admin, and never against themselves. The
-                  server enforces both rules independently — this just avoids
-                  offering a button that would be refused. */}
+              {/* Admin controls, as a menu rather than a row of icons, so a
+                  group of 200 doesn't turn into a wall of buttons. Every
+                  option here is enforced again by the server. */}
               {isAdmin && p.id !== currentUser?.id && (
                 <button
-                  onClick={() => setRemovingMember(p)}
-                  aria-label={`Remove ${p.username} from the group`}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-ping-text-light dark:text-ping-night-text-light hover:bg-red-500/10 hover:text-red-500 transition flex-shrink-0"
+                  onClick={() => setMenuFor(menuFor === p.id ? null : p.id)}
+                  aria-label={`Manage ${p.username}`}
+                  aria-expanded={menuFor === p.id}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-ping-text-light dark:text-ping-night-text-light hover:bg-ping-cream-dark dark:hover:bg-ping-night-card-active transition flex-shrink-0"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
                   </svg>
                 </button>
               )}
             </div>
-            {menuFor === p.id && onMessageMember && (
+            {/* The admin's menu for one member. Takes precedence over the
+                "Message @name" menu, which is for everyone else. */}
+            {isAdmin && menuFor === p.id && p.id !== currentUser?.id && (
+              <div className="ml-11 mt-1.5 rounded-xl border border-ping-sand/60 dark:border-ping-night-border bg-white dark:bg-ping-night-card shadow-sm overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuFor(null);
+                    void toggleAdmin(p);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-ping-dark dark:text-ping-night-text hover:bg-ping-cream dark:hover:bg-ping-night-card-active transition"
+                >
+                  <svg className="w-4 h-4 text-ping-teal dark:text-ping-teal-light" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {isGroupAdmin(conversation, p.id) ? "Dismiss as admin" : "Make admin"}
+                </button>
+                {onMessageMember && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuFor(null);
+                      onMessageMember(p);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-ping-dark dark:text-ping-night-text hover:bg-ping-cream dark:hover:bg-ping-night-card-active transition"
+                  >
+                    <svg className="w-4 h-4 text-ping-teal dark:text-ping-teal-light" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                    </svg>
+                    Message @{p.username}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuFor(null);
+                    setRemovingMember(p);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-red-500 hover:bg-red-500/10 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                  </svg>
+                  Remove from group
+                </button>
+              </div>
+            )}
+            {/* For everyone else: the plain "Message @name" menu. Admins get
+                the richer menu above instead of both. */}
+            {menuFor === p.id && onMessageMember && !(isAdmin && p.id !== currentUser?.id) && (
               <div className="ml-11 mt-1.5 rounded-xl border border-ping-sand/60 dark:border-ping-night-border bg-white dark:bg-ping-night-card shadow-sm overflow-hidden">
                 <button
                   type="button"
@@ -269,6 +377,81 @@ export default function ConversationInfoPanel({
             }
           }}
           onCancel={() => setRemovingMember(null)}
+        />
+      )}
+
+      {/* Group controls: only the bits that apply to you. */}
+      {isGroup && (
+        <>
+          {isAdmin && (
+            <>
+              <div className="px-5 pb-5">
+                <button
+                  onClick={() => void changeWhoCanAdd()}
+                  aria-pressed={everyoneCanAdd}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl border border-ping-sand/60 dark:border-ping-night-border text-left hover:bg-ping-cream dark:hover:bg-ping-night-card-active transition"
+                >
+                  <span
+                    className={`w-9 h-5 rounded-full flex-shrink-0 flex items-center p-0.5 transition ${
+                      everyoneCanAdd ? "bg-ping-teal justify-end" : "bg-ping-sand dark:bg-ping-night-border justify-start"
+                    }`}
+                    aria-hidden
+                  >
+                    <span className="w-4 h-4 rounded-full bg-white shadow-sm" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-ping-dark dark:text-ping-night-text">
+                      Anyone can add people
+                    </span>
+                    <span className="block text-xs text-ping-text-light dark:text-ping-night-text-light">
+                      {everyoneCanAdd
+                        ? "On — any member can add anyone to this group"
+                        : "Off — only admins can add people"}
+                    </span>
+                  </span>
+                </button>
+              </div>
+
+              <div className="px-5">
+                <GroupInvitePanel conversationId={conversation.id} groupName={conversation.name} />
+              </div>
+            </>
+          )}
+
+          <div className="px-5 py-5">
+            <button
+              onClick={() => setConfirmingLeave(true)}
+              className="text-sm font-semibold text-red-500 hover:underline"
+            >
+              Leave group
+            </button>            {currentUser?.id === ownerId && (
+              <p className="mt-1.5 text-xs text-ping-text-light dark:text-ping-night-text-light">
+                You're the owner. Make someone else an admin before you leave, so the group isn&apos;t left
+                without one.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {addingMembers && (
+        <AddParticipantsSheet
+          open
+          onClose={() => setAddingMembers(false)}
+          conversation={conversation}
+          onAdded={() => onMemberRemoved?.()}
+        />
+      )}
+
+      {confirmingLeave && (
+        <ConfirmDialog
+          title={`Leave "${conversation.name ?? "this group"}"?`}
+          body="You'll stop getting its messages. The group and everything in it stay exactly as they are, and the owner can add you back."
+          confirmLabel="Leave group"
+          destructive
+          isWorking={leaving}
+          onConfirm={() => void handleLeave()}
+          onCancel={() => setConfirmingLeave(false)}
         />
       )}
     </div>

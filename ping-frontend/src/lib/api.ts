@@ -12,14 +12,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/a
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// On app load, restore token from localStorage if it exists
+// On app load, restore token from sessionStorage if it exists
 if (typeof window !== "undefined") {
-  const stored = localStorage.getItem("ping-auth");
+  const stored = sessionStorage.getItem("ping-auth");
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
@@ -47,7 +48,7 @@ api.interceptors.response.use(
     const url: string = error?.config?.url || "";
 
     if (status === 401 && !url.startsWith("/auth")) {
-      localStorage.removeItem("ping-auth");
+      sessionStorage.removeItem("ping-auth");
       delete api.defaults.headers.common["Authorization"];
 
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth")) {

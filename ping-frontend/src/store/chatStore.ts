@@ -108,7 +108,22 @@ const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoadingConversations: true });
     try {
       const res = await api.get("/conversations");
-      set({ conversations: res.data, isLoadingConversations: false, conversationsFailed: false, conversationsLoaded: true });
+      const fresh = res.data as Conversation[];
+      set((state) => {
+        // Keep the OPEN chat's copy in step with the list. The info panel and
+        // the chat header read activeConversation, not the list, so without
+        // this a member added or promoted would not appear until you left the
+        // chat and came back.
+        const open = state.activeConversation;
+        const updatedOpen = open ? fresh.find((c) => c.id === open.id) ?? open : null;
+        return {
+          conversations: fresh,
+          activeConversation: updatedOpen,
+          isLoadingConversations: false,
+          conversationsFailed: false,
+          conversationsLoaded: true,
+        };
+      });
     } catch (err) {
       // The failure that actually happens in practice: you start both servers
       // and open the app, but Spring Boot needs a while before it accepts
@@ -262,7 +277,11 @@ const useChatStore = create<ChatState>((set, get) => ({
         : [conversation, ...state.conversations];
 
       next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      return { conversations: next };
+      // The open chat reads activeConversation, not the list, so it has to be
+      // refreshed here too or a new member wouldn't show in the info panel.
+      const open = state.activeConversation;
+      const updatedOpen = open ? next.find((c) => c.id === open.id) ?? open : null;
+      return { conversations: next, activeConversation: updatedOpen };
     });
   },
 

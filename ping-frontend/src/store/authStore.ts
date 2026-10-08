@@ -1,6 +1,6 @@
 import { removePushSubscription } from "@/lib/push";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import api from "@/lib/api";
 import { AxiosError } from "axios";
 
@@ -193,6 +193,7 @@ const useAuthStore = create<AuthState>()(
     }),
     {
       name: "ping-auth",
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         token: state.token,
         user: state.user,

@@ -7,7 +7,6 @@ import com.example.pingBackend.model.Conversation;
 import com.example.pingBackend.model.User;
 import com.example.pingBackend.repository.ConversationRepository;
 import com.example.pingBackend.repository.UserRepository;
-import com.example.pingBackend.security.SubscriptionRevoker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Update;
@@ -25,7 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import com.example.pingBackend.exception.BadRequestException;
-import com.example.pingBackend.exception.ForbiddenException;
 import com.example.pingBackend.exception.NotFoundException;
 import com.example.pingBackend.exception.GoneException;
 
@@ -38,7 +36,6 @@ public class ConversationService {
     private final BlockService blockService;
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final SubscriptionRevoker subscriptionRevoker;
     private final MongoTemplate mongoTemplate;
 
     // Create or get existing private conversation
@@ -177,73 +174,6 @@ public class ConversationService {
         }
 
         return mapToResponse(conversation, currentUserId);
-    }
-
-    /**
-     * Remove a participant from a group. Admin only.
-     */
-    public void removeParticipant(String conversationId, String requesterId, String targetUserId) {
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
-
-        if (!"GROUP".equals(conversation.getType())) {
-            throw new BadRequestException("Only group conversations have members to remove");
-        }
-        // Authorisation, not just membership: being in the group is not the
-        // same as being allowed to remove people from it.
-        if (!requesterId.equals(conversation.getAdmin())) {
-            throw new ForbiddenException("Only the group admin can remove members");
-        }
-        if (targetUserId.equals(conversation.getAdmin())) {
-            throw new BadRequestException("The admin can't be removed from their own group");
-        }
-        if (!conversation.getParticipants().contains(targetUserId)) {
-            throw new BadRequestException("That user isn't in this group");
-        }
-
-        // The list from Mongo may be immutable depending on how it was
-        // deserialised, so rebuild rather than mutating in place.
-        List<String> remaining = conversation.getParticipants().stream()
-                .filter(id -> !id.equals(targetUserId))
-                .collect(Collectors.toList());
-
-        conversation.setParticipants(remaining);
-        // Leaving a stale unread count for someone no longer in the group would
-        // keep them in the document forever for no reason.
-        conversation.getUnreadCount().remove(targetUserId);
-        conversation.setUpdatedAt(LocalDateTime.now());
-
-        conversationRepository.save(conversation);
-
-        // Removing them from the participant list stops NEW subscriptions — the
-        // subscribe check reads that list. It does nothing to the ones already
-        // open, which would keep delivering every message until they reconnect.
-        // So cancel those now, and before the system message below is broadcast,
-        // so the removed member doesn't even receive the note about their removal
-        // through the group topic (they get their own notification instead).
-        subscriptionRevoker.revokeConversation(targetUserId, conversationId);
-
-        String adminName = userRepository.findById(requesterId)
-                .map(User::getUsername).orElse("An admin");
-        String removedName = userRepository.findById(targetUserId)
-                .map(User::getUsername).orElse("A member");
-
-        MessageResponse systemMessage = messageService.saveSystemMessage(
-                conversationId, adminName + " removed " + removedName + " from the group");
-
-        // Everyone still in the group sees the note appear live.
-        messagingTemplate.convertAndSend("/topic/conversation/" + conversationId, systemMessage);
-        remaining.forEach(participantId ->
-                messagingTemplate.convertAndSend("/topic/user/" + participantId + "/inbox", systemMessage));
-
-        // And the removed user is told directly, on their own topic — they're
-        // off the participant list now, so nothing sent to the conversation
-        // reaches them. Without this their client would keep showing a group
-        // they've silently lost access to until the next refresh.
-        Object payload = java.util.Map.of("conversationId", conversationId, "removedBy", adminName);
-        messagingTemplate.convertAndSend(
-                "/topic/user/" + targetUserId + "/removed-from-conversation",
-                payload);
     }
 
     /**
@@ -428,6 +358,8 @@ public class ConversationService {
                 .type(conversation.getType())
                 .participants(participantDetails)
                 .name(conversation.getName())
+                .admins("GROUP".equals(conversation.getType()) ? conversation.adminIds() : null)
+                .addMembersBy("GROUP".equals(conversation.getType()) ? conversation.getAddMembersBy() : null)
                 .lastMessage(lastMessage)
                 .unreadCount(unread)
                 .temporary(conversation.isTemporary())
