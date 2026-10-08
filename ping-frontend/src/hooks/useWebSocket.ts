@@ -9,6 +9,7 @@ import { DELETED_PREVIEW } from "@/lib/messages";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import useWorkspaceStore, { TaskEvent } from "@/store/workspaceStore";
+import useOfflineQueueStore from "@/store/offlineQueueStore";
 import {
   Conversation,
   Message,
@@ -275,6 +276,34 @@ export default function useWebSocket() {
     return true;
   }, []);
 
+  // Flush queued offline messages automatically when WebSocket connection becomes active
+  useEffect(() => {
+    if (!isConnected) return;
+    const queue = useOfflineQueueStore.getState().queuedMessages;
+    if (queue.length === 0) return;
+
+    let flushedCount = 0;
+    queue.forEach((msg) => {
+      const ok = publish("/app/chat.send", {
+        conversationId: msg.conversationId,
+        content: msg.content,
+        type: msg.type,
+        attachmentKey: msg.attachment?.key,
+        attachmentMimeType: msg.attachment?.mimeType,
+        attachmentSizeBytes: msg.attachment?.sizeBytes,
+        attachmentDurationSeconds: msg.attachment?.durationSeconds,
+        attachmentFileName: msg.attachment?.fileName,
+      });
+      if (ok) {
+        useOfflineQueueStore.getState().removeMessage(msg.id);
+        flushedCount++;
+      }
+    });
+    if (flushedCount > 0) {
+      toast.success(`Back online! Sent ${flushedCount} queued message${flushedCount > 1 ? "s" : ""}.`);
+    }
+  }, [isConnected, publish]);
+
   // Send a message. `attachment` is only set for voice notes today, but the
   // shape matches Message.Attachment on the backend so this same path will
   // carry images/files later without changing again.
@@ -292,8 +321,8 @@ export default function useWebSocket() {
         // Images/files only — display metadata, never used as a storage path.
         fileName?: string;
       }
-    ): boolean =>
-      publish("/app/chat.send", {
+    ): boolean => {
+      const ok = publish("/app/chat.send", {
         conversationId,
         content,
         type,
@@ -302,7 +331,19 @@ export default function useWebSocket() {
         attachmentSizeBytes: attachment?.sizeBytes,
         attachmentDurationSeconds: attachment?.durationSeconds,
         attachmentFileName: attachment?.fileName,
-      }),
+      });
+
+      if (!ok) {
+        useOfflineQueueStore.getState().enqueueMessage({
+          conversationId,
+          content,
+          type,
+          attachment,
+        });
+        toast("Offline: Message queued and will be sent automatically when back online.", { icon: "⚡" });
+      }
+      return true;
+    },
     [publish]
   );
 

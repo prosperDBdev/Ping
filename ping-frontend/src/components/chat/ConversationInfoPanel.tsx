@@ -186,6 +186,19 @@ export default function ConversationInfoPanel({
         )}
         <h2 className="font-bold text-ping-dark dark:text-ping-night-text text-base">{displayName}</h2>
         <p className="text-xs text-ping-text-light dark:text-ping-night-text-light mt-1">{tagline}</p>
+        {!isGroup && !isSelfChat(conversation) && otherUser && (
+          <button
+            onClick={() => {
+              if (onMessageMember) {
+                onMessageMember(otherUser);
+                toast(`Pinged @${otherUser.username} 👋`, { icon: "⚡" });
+              }
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-ping-teal/10 dark:bg-ping-teal-light/10 text-ping-teal dark:text-ping-teal-light text-xs font-bold hover:bg-ping-teal/20 transition"
+          >
+            ⚡ Ping @{otherUser.username}
+          </button>
+        )}
         {isTemporary && (
           <div className="mt-3">
             <ExpiryBadge expiresAt={conversation.expiresAt!} />

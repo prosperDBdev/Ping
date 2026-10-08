@@ -26,6 +26,8 @@ const RealtimeContext = createContext<Realtime | null>(null);
  * useRealtime() rather than opening a connection of their own. A second
  * connection would be a parallel system to keep in step with this one.
  */
+import NetworkBanner from "@/components/common/NetworkBanner";
+
 export default function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const {
     isConnected,
@@ -73,7 +75,12 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
     ]
   );
 
-  return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
+  return (
+    <RealtimeContext.Provider value={value}>
+      <NetworkBanner isWebSocketConnected={isConnected} />
+      {children}
+    </RealtimeContext.Provider>
+  );
 }
 
 export function useRealtime(): Realtime {

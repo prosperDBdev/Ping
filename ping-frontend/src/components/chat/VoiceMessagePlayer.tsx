@@ -79,9 +79,44 @@ export default function VoiceMessagePlayer({
   const fillColor = isMine ? "bg-white" : "bg-ping-teal dark:bg-ping-teal-light";
   const totalSeconds = durationSeconds ?? 0;
   const progressPct = totalSeconds > 0 ? Math.min(100, (progressSeconds / totalSeconds) * 100) : 0;
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
+
+  const seekToPosition = (clientX: number) => {
+    if (!progressBarRef.current || totalSeconds <= 0) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clickX = clientX - rect.left;
+    const targetPct = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetSeconds = targetPct * totalSeconds;
+
+    setProgressSeconds(targetSeconds);
+    if (audioRef.current) {
+      audioRef.current.currentTime = targetSeconds;
+    }
+
+    if (status === "idle" || status === "error") {
+      void (async () => {
+        setStatus("loading");
+        try {
+          const url = await fetchVoiceNoteBlobUrl(attachmentKey);
+          blobUrlRef.current = url;
+          setBlobUrl(url);
+          setStatus("ready");
+          requestAnimationFrame(() => {
+            if (audioRef.current) {
+              audioRef.current.currentTime = targetSeconds;
+              audioRef.current.play();
+              setIsPlaying(true);
+            }
+          });
+        } catch {
+          setStatus("error");
+        }
+      })();
+    }
+  };
 
   return (
-    <div className="flex items-center gap-2.5 min-w-[180px]">
+    <div className="flex items-center gap-2.5 min-w-[200px]">
       <button
         onClick={handleToggle}
         aria-label={isPlaying ? "Pause voice note" : "Play voice note"}
@@ -102,8 +137,20 @@ export default function VoiceMessagePlayer({
         )}
       </button>
 
-      <div className="flex-1 min-w-0">
-        <div className={`h-1.5 rounded-full overflow-hidden ${barColor}`}>
+      <div
+        ref={progressBarRef}
+        onClick={(e) => seekToPosition(e.clientX)}
+        onTouchStart={(e) => {
+          if (e.touches.length > 0) seekToPosition(e.touches[0].clientX);
+        }}
+        role="slider"
+        aria-label="Voice note timeline"
+        aria-valuenow={Math.round(progressSeconds)}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(totalSeconds)}
+        className="flex-1 min-w-0 py-1.5 cursor-pointer group"
+      >
+        <div className={`h-2 rounded-full overflow-hidden relative ${barColor} group-hover:h-2.5 transition-all`}>
           <div className={`h-full rounded-full transition-all ${fillColor}`} style={{ width: `${progressPct}%` }} />
         </div>
       </div>
