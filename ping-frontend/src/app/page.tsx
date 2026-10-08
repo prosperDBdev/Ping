@@ -17,6 +17,11 @@ import { useEffect } from "react";
  */
 const BUILT_FEATURES = [
   {
+    title: "Encrypted conversations",
+    body: "Every private and group chat is end-to-end encrypted for all accounts system-wide. Your messages, voice notes, and media stay completely private between participants.",
+    icon: "M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z",
+  },
+  {
     title: "Real-time messaging",
     body: "Private and group chats over a live connection. Read receipts, unread counts, and who's online — no refreshing.",
     icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
