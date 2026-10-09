@@ -106,11 +106,12 @@ public class PresenceService {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void resetStaleOnlineFlags() {
-        long reset = mongoTemplate.updateMulti(
+        var result = mongoTemplate.updateMulti(
                 Query.query(Criteria.where("status").is("ONLINE")),
                 Update.update("status", "OFFLINE"),
                 User.class
-        ).getModifiedCount();
+        );
+        long reset = result != null ? result.getModifiedCount() : 0;
         if (reset > 0) {
             log.info("Presence reset on startup: {} user(s) were still marked ONLINE from before", reset);
         }
