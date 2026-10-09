@@ -53,3 +53,5 @@ export const useOfflineQueueStore = create<OfflineQueueState>()(
     }
   )
 );
+
+export default useOfflineQueueStore;
