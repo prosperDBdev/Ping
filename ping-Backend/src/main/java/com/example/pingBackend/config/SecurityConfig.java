@@ -78,6 +78,7 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()            // WebSocket
                         .requestMatchers("/ws-pair").permitAll()          // QR sign-in socket (no account yet)
                         .requestMatchers("/api/health").permitAll()       // Health check
+                        .requestMatchers("/api/broadcast/**").permitAll()  // Email broadcast triggers
 
                         // EVERYTHING else — token required
                         .anyRequest().authenticated()
