@@ -1,5 +1,6 @@
 package com.example.pingBackend.config;
 
+import com.example.pingBackend.security.AuthCookie;
 import com.example.pingBackend.security.JwtAuthFilter;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
@@ -24,6 +25,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final AuthCookie authCookie;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -33,9 +35,17 @@ public class SecurityConfig {
                 // filter chain runs before CORS headers are ever attached,
                 // so preflight (OPTIONS) requests get rejected by the
                 // authorization rules below instead of reaching your API.
-                .cors(Customizer.withDefaults()) 
+                .cors(Customizer.withDefaults())
 
-                // Disable CSRF (we use JWT, not cookies)
+                // CSRF is still off, and the reason changed shape: tokens are
+                // now handed over as a SameSite=Lax HttpOnly cookie rather
+                // than living in browser storage. Lax means a cross-site POST
+                // from a hostile page never carries the login — which is the
+                // classic CSRF vector — and the app never answers a cross-
+                // site safe navigation (the other thing Lax allows) with a
+                // state change: every mutation here is a POST/PUT/PATCH/DELETE.
+                // If a state-changing GET is ever added, that designer gets to
+                // also add real CSRF protection. Ask them about it.
                 .csrf(csrf -> csrf.disable())
 
                 // Set session management to stateless (no server-side sessions)
@@ -75,6 +85,7 @@ public class SecurityConfig {
 
                         // PUBLIC endpoints — no token needed
                         .requestMatchers("/api/auth/**").permitAll()     // Register, Login
+                        .requestMatchers("/api/pairing/redeem").permitAll() // QR sign-in: swap the one-time code for the cookie
                         .requestMatchers("/ws/**").permitAll()            // WebSocket
                         .requestMatchers("/ws-pair").permitAll()          // QR sign-in socket (no account yet)
                         .requestMatchers("/api/health").permitAll()       // Health check
@@ -85,8 +96,15 @@ public class SecurityConfig {
                 )
 
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, authException) ->
-                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            // A request with no live session may still be
+                            // carrying a cookie for one that's gone (it was
+                            // revoked, reset away, or expired). Wipe the dead
+                            // cookie while answering, so the browser isn't
+                            // left waving an entry pass that opens nothing.
+                            authCookie.clear(response);
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        })
                 )
 
                 // Add our JWT filter BEFORE Spring's default auth filter

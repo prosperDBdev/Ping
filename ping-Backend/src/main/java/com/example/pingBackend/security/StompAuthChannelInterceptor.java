@@ -75,15 +75,38 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     private void authenticate(StompHeaderAccessor accessor) {
+        TokenAuthenticator.Authenticated signedIn;
+
         String header = accessor.getFirstNativeHeader("Authorization");
         String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : null;
 
-        TokenAuthenticator.Authenticated signedIn = tokenAuthenticator.authenticateSession(token).orElseThrow(() -> {
-            log.warn("Refused WebSocket connection without a valid token (session {})", accessor.getSessionId());
-            // Throwing here makes Spring answer with an ERROR frame and close the
-            // connection — the client never reaches CONNECTED.
-            return new MessageDeliveryException("Unauthorized");
-        });
+        if (token != null) {
+            signedIn = tokenAuthenticator.authenticateSession(token).orElseThrow(() -> {
+                log.warn("Refused WebSocket connection with a stale token (session {})", accessor.getSessionId());
+                // Throwing here makes Spring answer with an ERROR frame and
+                // close the connection — the client never reaches CONNECTED.
+                return new MessageDeliveryException("Unauthorized");
+            });
+        } else {
+            // No header to check: the identity was settled once at the
+            // handshake, from the HttpOnly login cookie the browser brought
+            // (WebSocketHandshakeAuth). Here it is verified AGAIN against the
+            // live session state — a device signed out between handshake and
+            // CONNECT is still refused, and the session's activity is
+            // touched, exactly as the header path does.
+            Object stash = accessor.getSessionAttributes() != null
+                    ? accessor.getSessionAttributes().get(WebSocketHandshakeAuth.ATTRIBUTE)
+                    : null;
+            TokenAuthenticator.Authenticated fromHandshake = stash instanceof WebSocketHandshakeAuth.Identity identity
+                    ? tokenAuthenticator.authenticateSession(identity.token()).orElse(null)
+                    : null;
+            if (fromHandshake == null) {
+                log.warn("Refused WebSocket connection with no token or handshake identity (session {})",
+                        accessor.getSessionId());
+                throw new MessageDeliveryException("Unauthorized");
+            }
+            signedIn = fromHandshake;
+        }
 
         accessor.setUser(new UserIdAuthentication(signedIn.user()));
 

@@ -20,7 +20,7 @@ import {
 
 export default function useWebSocket() {
   const clientRef = useRef<Client | null>(null);
-  const { user, token } = useAuthStore();
+  const { user } = useAuthStore();
   const {
     activeConversation,
     addMessage,
@@ -53,10 +53,11 @@ export default function useWebSocket() {
 
   // Connect to WebSocket
   useEffect(() => {
-    if (!user?.id || !token) return;
+    // Only user presence matters: the connection proves itself with the
+    // login cookie (see stompClient), not with anything we hold here.
+    if (!user?.id) return;
 
-    // The login token, not the user id — the server works out who we are from it.
-    const client = createStompClient(token);
+    const client = createStompClient();
     clientRef.current = client;
 
     client.onConnect = () => {
@@ -165,7 +166,7 @@ export default function useWebSocket() {
       subscriptionsRef.current.clear();
       setIsConnected(false);
     };
-  }, [user?.id, token]);
+  }, [user?.id]);
 
   // Subscribe to active conversation
   useEffect(() => {

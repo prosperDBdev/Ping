@@ -19,9 +19,10 @@ interface ApiError {
   message?: string;
 }
 
-/** What the server sends when a sign-in is complete. */
+/** What the server sends when a sign-in is complete. No token in here: the
+ * login rides in an HttpOnly cookie set by the same response (AuthCookie),
+ * which JavaScript can't read — by design. */
 export interface SignedIn {
-  token: string;
   id: string;
   username: string;
   email: string;
@@ -36,7 +37,6 @@ export type LoginResult =
   | { done: false; challenge: string; emailHint: string };
 
 interface AuthState {
-  token: string | null;
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -57,7 +57,6 @@ interface AuthState {
 const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      token: null,
       user: null,
       isAuthenticated: false,
       isLoading: false,
@@ -124,10 +123,11 @@ const useAuthStore = create<AuthState>()(
         }
       },
 
-      completeSignIn: ({ token, id, username, email }: SignedIn) => {
-        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      completeSignIn: ({ id, username, email }: SignedIn) => {
+        // No Authorization header to set and nothing secret to hold: the
+        // login cookie was set by the sign-in response itself, and every
+        // request from here carries it (api is created withCredentials).
         set({
-          token,
           user: { id, username, email, avatarUrl: null, status: "ONLINE" },
           isAuthenticated: true,
           isLoading: false,
@@ -136,25 +136,19 @@ const useAuthStore = create<AuthState>()(
 
       logout: () => {
         // Stop pushes to this device for this account, so the next person to
-        // sign in here doesn't receive the last person's messages. The token
-        // is passed explicitly because the header is removed straight after.
+        // sign in here doesn't receive the last person's messages.
         //
         // THEN end this device's session on the server (Stage 14), so the
-        // token is dead everywhere, not just forgotten by this browser. In that
-        // order: once the session is gone the token can't remove the push
-        // subscription any more.
-        const token = get().token;
-        if (token) {
-          void (async () => {
-            await removePushSubscription(token).catch(() => {});
-            await api
-              .delete("/sessions/current", { headers: { Authorization: `Bearer ${token}` } })
-              .catch(() => {});
-          })();
-        }
-        delete api.defaults.headers.common["Authorization"];
+        // login is dead everywhere, not just forgotten by this browser —
+        // that call also answers with a Max-Age=0 cookie that wipes the
+        // browser's own copy. Both requests authenticate with the cookie.
+        // In that order: once the session is gone the cookie can't do
+        // anything any more.
+        void (async () => {
+          await removePushSubscription().catch(() => {});
+          await api.delete("/sessions/current").catch(() => {});
+        })();
         set({
-          token: null,
           user: null,
           isAuthenticated: false,
         });
@@ -169,11 +163,8 @@ const useAuthStore = create<AuthState>()(
       },
 
       fetchCurrentUser: async () => {
-        const token = get().token;
-        if (!token) return;
-
         try {
-          api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+          // Authenticates with the login cookie; no header to set.
           const res = await api.get("/users/me");
           set({
             user: res.data,
@@ -182,8 +173,9 @@ const useAuthStore = create<AuthState>()(
         } catch (err: unknown) {
           const error = err as AxiosError;
           if (error.response?.status === 401) {
-            set({ token: null, user: null, isAuthenticated: false });
-            delete api.defaults.headers.common["Authorization"];
+            // Nothing signed in (or the server says so): drop local state.
+            // The 401 response also carried a cookie wipe from the backend.
+            set({ user: null, isAuthenticated: false });
             throw err;
           }
           // On network errors or offline server, retain local user session
@@ -195,13 +187,14 @@ const useAuthStore = create<AuthState>()(
       name: "ping-auth",
       // localStorage, not sessionStorage. sessionStorage dies the moment the
       // tab is closed or thrown away — and mobile browsers discard
-      // background tabs aggressively, which is why people were signed out
-      // "after a day" even with a still-valid server session. The server
-      // session itself still expires (7 days of inactivity — see the
-      // backend's SessionService), so the window the user sees stays 7 days.
+      // background tabs aggressively, which once got people signed out
+      // "after a day" even with a still-valid server session. Only NON-SECRET
+      // identity lives here: who you are, so a reload can paint the right
+      // shell without waiting on the network. The login itself is an
+      // HttpOnly cookie, which survives on its own; the server session still
+      // expires (7 days of inactivity — see the backend's SessionService).
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        token: state.token,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),

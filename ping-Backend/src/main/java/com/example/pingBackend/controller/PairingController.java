@@ -1,9 +1,13 @@
 package com.example.pingBackend.controller;
 
+import com.example.pingBackend.dto.response.AuthResponse;
 import com.example.pingBackend.exception.TooManyRequestsException;
 import com.example.pingBackend.model.User;
+import com.example.pingBackend.security.AuthCookie;
 import com.example.pingBackend.service.PairingService;
 import com.example.pingBackend.service.RateLimiter;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -33,12 +37,42 @@ public class PairingController {
 
     private final PairingService pairingService;
     private final RateLimiter rateLimiter;
+    private final AuthCookie authCookie;
 
     @Data
     public static class CodeRequest {
         @NotBlank(message = "That isn't a Ping QR code")
         @Size(max = 100, message = "That isn't a Ping QR code")
         private String code;
+    }
+
+    /**
+     * The computer's side of QR sign-in: it got a one-time redeem code down
+     * its pairing socket (PairingService.approve) and POSTs it here to
+     * actually become signed in. Public on purpose — this computer has no
+     * login yet, that's the entire point — and defended like /api/auth: the
+     * code is 256 unguessable bits, single-use, and short-lived, and the
+     * endpoint is rate limited per IP so guessing is hopeless.
+     *
+     * The session is issued HERE rather than at approve-time: approve only
+     * blesses a redeem code, so a computer that never comes back leaves no
+     * session orphaned. The login cookie rides out on this very response,
+     * browser-to-browser, never in JavaScript's hands.
+     */
+    @PostMapping("/redeem")
+    public ResponseEntity<AuthResponse> redeem(@Valid @RequestBody CodeRequest request,
+                                               HttpServletRequest http, HttpServletResponse res) {
+        if (!rateLimiter.tryAcquire("pairing-redeem:ip:" + clientIp(http), 30, Duration.ofMinutes(10))) {
+            throw new TooManyRequestsException("Too many attempts. Please wait a few minutes.");
+        }
+        PairingService.Redeemed redeemed = pairingService.redeem(request.getCode());
+        User user = redeemed.user();
+        authCookie.write(res, redeemed.token());
+        return ResponseEntity.ok(AuthResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .build());
     }
 
     @PostMapping("/lookup")
@@ -65,5 +99,10 @@ public class PairingController {
         if (!rateLimiter.tryAcquire("pairing:user:" + user.getId(), 30, Duration.ofMinutes(10))) {
             throw new TooManyRequestsException("Too many attempts. Please wait a few minutes.");
         }
+    }
+
+    /** The caller's real IP, the same way AuthController works it out. */
+    private static String clientIp(HttpServletRequest request) {
+        return request.getRemoteAddr();
     }
 }

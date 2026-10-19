@@ -2,6 +2,7 @@ package com.example.pingBackend.config;
 
 import com.example.pingBackend.security.LiveConnectionRegistry;
 import com.example.pingBackend.security.StompAuthChannelInterceptor;
+import com.example.pingBackend.security.WebSocketHandshakeAuth;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
     private final LiveConnectionRegistry liveConnectionRegistry;
+    private final WebSocketHandshakeAuth webSocketHandshakeAuth;
 
     /** Same allow-list as REST CORS, so a deployed frontend can connect here too. */
     @Value("${app.cors.allowed-origins}")
@@ -37,12 +39,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // The /ws endpoint itself stays open (SecurityConfig permits it). That's
-        // unavoidable, not an oversight: browsers can't attach an Authorization
-        // header to the WebSocket handshake. So authentication happens one step
-        // later, on the first STOMP frame — see StompAuthChannelInterceptor.
+        // The /ws endpoint itself stays open (SecurityConfig permits it).
+        // That's unavoidable, not an oversight: browsers can't attach an
+        // Authorization header to the WebSocket handshake. Authentication
+        // therefore starts at that very handshake — webSocketHandshakeAuth
+        // reads the HttpOnly login cookie the browser brought (a channel
+        // JavaScript cannot tamper with), and the STOMP CONNECT frame that
+        // follows confirms it (StompAuthChannelInterceptor); see the pair
+        // of classes for why the split.
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(allowedOrigins)
+                .addInterceptors(webSocketHandshakeAuth)
                 .withSockJS();
     }
 

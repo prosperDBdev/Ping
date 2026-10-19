@@ -55,10 +55,11 @@ export async function ensurePushSubscription(): Promise<void> {
 
 /**
  * Stop pushes to this device: on sign-out, or when notifications are turned
- * off. `token` is passed explicitly for sign-out, where the request runs after
- * the app has already dropped its own copy of the token.
+ * off. The request authenticates with the login cookie, so it happens while
+ * the browser is still signed in (the sign-out flow calls this BEFORE it
+ * ends the server session).
  */
-export async function removePushSubscription(token?: string): Promise<void> {
+export async function removePushSubscription(): Promise<void> {
   if (!pushSupported()) return;
   const registration = await navigator.serviceWorker.getRegistration();
   const subscription = await registration?.pushManager.getSubscription();
@@ -66,7 +67,6 @@ export async function removePushSubscription(token?: string): Promise<void> {
   try {
     await api.delete("/push/subscriptions", {
       data: { endpoint: subscription.endpoint },
-      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
     });
   } finally {
     await subscription.unsubscribe();

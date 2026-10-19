@@ -14,29 +14,31 @@ const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:8080/w
 let stompClient: Client | null = null;
 
 /**
- * Open the live connection, proving who we are with the login token.
+ * Open the live connection, proven by the login cookie.
  *
  * This used to send `userId` in the connect headers — and the server believed
- * it. Anyone could type in someone else's id and be treated as them: shown as
- * online, sending messages in their name. Now the connection carries the same
- * token the REST API uses, and the server works out the user from that token
- * itself. There is nothing left for the browser to claim.
+ * it. Anyone could type in someone else's id and be treated as them. Then it
+ * sent the login token in a STOMP CONNECT frame — which forced the browser to
+ * keep the token in JavaScript just for this, the one weakness the cookie
+ * switch exists to remove.
  *
- * The token goes in the STOMP CONNECT frame rather than the WebSocket handshake
- * because browsers don't let JavaScript set an Authorization header on a
- * WebSocket handshake. The CONNECT frame is the first thing the server reads
- * after the socket opens, so it's the earliest point the token can be checked.
+ * Now neither happens: the HttpOnly login cookie rides along on the SockJS/
+ * WebSocket handshake itself (browsers attach cookies automatically, and
+ * JavaScript cannot forge what it cannot read), and the backend verifies it
+ * in two steps — WebSocketHandshakeAuth as the transport opens, and
+ * StompAuthChannelInterceptor again at CONNECT, with the same
+ * TokenAuthenticator the REST requests use. There is no header here at all,
+ * and nothing for the browser to claim.
  */
-export const createStompClient = (token: string): Client => {
+export const createStompClient = (): Client => {
   if (stompClient && stompClient.active) {
     stompClient.deactivate();
   }
 
   stompClient = new Client({
     webSocketFactory: () => new SockJS(WEBSOCKET_URL) as WebSocket,
-    connectHeaders: {
-      Authorization: `Bearer ${token}`,
-    },
+    // SockJS sends cookies (withCredentials) on its own transports by
+    // default — that fact is what makes the cookie handshake work.
     reconnectDelay: 5000,
     debug: (str) => {
       if (str.includes("SEND") || str.includes("MESSAGE") || str.includes("CONNECTED")) {

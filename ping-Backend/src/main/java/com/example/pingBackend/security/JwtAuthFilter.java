@@ -55,6 +55,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * The header is checked first (still valid for scripts that hold a
+     * token), then the HttpOnly login cookie — now the normal carrier for
+     * the browser, since the token never lives in JavaScript anymore.
+     * AuthCookie writes it at sign-in; SessionController and the 401 entry
+     * point clear it.
+     */
     private static String extractToken(HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {

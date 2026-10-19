@@ -6,6 +6,7 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import toast from "react-hot-toast";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
+import api from "@/lib/api";
 import useAuthStore, { SignedIn } from "@/store/authStore";
 import { pairingLink, pairingSocketUrl } from "@/lib/security";
 
@@ -32,7 +33,11 @@ export default function QrSignInPage() {
     let finished = false;
 
     socket.onmessage = async (event) => {
-      let msg: { type?: string; code?: string } & Partial<SignedIn>;
+      let msg: {
+        type?: string;
+        code?: string;
+        redeemCode?: string;
+      } & Partial<SignedIn>;
       try {
         msg = JSON.parse(event.data);
       } catch {
@@ -49,11 +54,22 @@ export default function QrSignInPage() {
           setQrImage(image);
           setPhase("showing");
         }
-      } else if (msg.type === "approved" && msg.token && msg.id && msg.username) {
+      } else if (msg.type === "approved" && msg.redeemCode) {
         finished = true;
-        completeSignIn({ token: msg.token, id: msg.id, username: msg.username, email: msg.email ?? "" });
-        toast.success("Signed in from your phone 👋");
-        router.push("/dashboard");
+        // The phone approved. The message carries a one-time redeem code —
+        // deliberately NOT a token. Swapping it for the real login is a
+        // normal HTTP call whose response sets the HttpOnly cookie; the
+        // token never passes through JavaScript at all.
+        try {
+          const res = await api.post("/pairing/redeem", { code: msg.redeemCode });
+          completeSignIn(res.data as SignedIn);
+          toast.success("Signed in from your phone 👋");
+          router.push("/dashboard");
+        } catch {
+          // Used up, expired, or rate-limited: start over with a fresh code.
+          setPhase("expired");
+          setQrImage(null);
+        }
       } else if (msg.type === "denied" || msg.type === "expired") {
         finished = true;
         setQrImage(null);

@@ -2,6 +2,7 @@ package com.example.pingBackend.controller;
 
 import com.example.pingBackend.model.LoginSession;
 import com.example.pingBackend.model.User;
+import com.example.pingBackend.security.AuthCookie;
 import com.example.pingBackend.security.CurrentSession;
 import com.example.pingBackend.service.SessionService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ import java.util.Map;
 public class SessionController {
 
     private final SessionService sessionService;
+    private final AuthCookie authCookie;
 
     /** What the device list shows. No token, no user id: nothing to reuse. */
     public record DeviceResponse(String id, String deviceName, String method,
@@ -52,8 +54,11 @@ public class SessionController {
 
     @DeleteMapping("/current")
     public ResponseEntity<Void> signOutHere(@AuthenticationPrincipal User user,
-                                            @RequestAttribute(CurrentSession.ATTRIBUTE) String currentId) {
+                                            @RequestAttribute(CurrentSession.ATTRIBUTE) String currentId,
+                                            jakarta.servlet.http.HttpServletResponse res) {
         sessionService.revoke(user.getId(), currentId);
+        // The browser's copy of the token dies with the session it named.
+        authCookie.clear(res);
         return ResponseEntity.noContent().build();
     }
 

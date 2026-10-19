@@ -58,9 +58,15 @@ class PairingServiceTest {
         return first.substring(start, first.indexOf('"', start));
     }
 
+    private static String redeemCodeFrom(List<String> received) {
+        String approved = received.get(1);
+        int start = approved.indexOf("\"redeemCode\":\"") + 14;
+        return approved.substring(start, approved.indexOf('"', start));
+    }
+
     @Test
-    @DisplayName("approving sends the computer a token for a new QR session, named after the computer")
-    void approveSignsTheComputerIn() throws Exception {
+    @DisplayName("approving hands the computer a redeem code; redeeming it signs the computer in")
+    void approveThenRedeemSignsTheComputerIn() throws Exception {
         List<String> received = new ArrayList<>();
         pairing.open(computer(received), "Chrome on Windows");
         String code = codeFrom(received);
@@ -68,9 +74,16 @@ class PairingServiceTest {
         assertEquals("Chrome on Windows", pairing.deviceFor(code));
         pairing.approve(code, maya);
 
-        assertEquals(List.of("QR"), sessions.methods);
+        // Approval on its own signs nobody in: there is no session yet, and
+        // what rode down the socket was a redeem code, never a token.
+        assertEquals(0, sessions.methods.size());
         assertTrue(received.get(1).contains("\"type\":\"approved\""));
-        assertTrue(received.get(1).contains("\"token\":\""));
+        assertTrue(received.get(1).contains("\"redeemCode\":\""));
+        assertFalse(received.get(1).contains("Bearer"));
+
+        PairingService.Redeemed redeemed = pairing.redeem(redeemCodeFrom(received));
+        assertEquals(List.of("QR"), sessions.methods);
+        assertEquals(maya, redeemed.user());
     }
 
     @Test
@@ -101,6 +114,16 @@ class PairingServiceTest {
         pool.shutdown();
 
         assertEquals(1, approved.get());
+        // Approval now only blesses a redeem code, so nothing is signed in
+        // until the computer comes back for it.
+        assertEquals(0, sessions.methods.size());
+
+        // Exactly one approvals survived, so exactly one redeem code exists:
+        // it redeems once, and never again.
+        String redeemCode = redeemCodeFrom(received);
+        PairingService.Redeemed redeemed = pairing.redeem(redeemCode);
+        assertEquals(maya, redeemed.user());
+        assertThrows(GoneException.class, () -> pairing.redeem(redeemCode));
         assertEquals(1, sessions.methods.size());
     }
 

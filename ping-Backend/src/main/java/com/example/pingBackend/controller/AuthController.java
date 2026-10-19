@@ -7,10 +7,12 @@ import com.example.pingBackend.dto.request.RegisterRequest;
 import com.example.pingBackend.dto.request.ResetPasswordRequest;
 import com.example.pingBackend.dto.response.AuthResponse;
 import com.example.pingBackend.dto.response.InvitePreviewResponse;
+import com.example.pingBackend.security.AuthCookie;
 import com.example.pingBackend.service.AppInviteService;
 import com.example.pingBackend.service.AuthService;
 import com.example.pingBackend.service.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -31,11 +33,12 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final AppInviteService appInviteService;
+    private final AuthCookie authCookie;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http, HttpServletResponse res) {
         AuthResponse response = authService.register(request, userAgent(http));
-        return ResponseEntity.ok(response);
+        return done(response, res);
     }
 
     /**
@@ -44,14 +47,31 @@ public class AuthController {
      * /login/verify.
      */
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http, HttpServletResponse res) {
         AuthResponse response = authService.login(request, clientIp(http), userAgent(http));
-        return ResponseEntity.ok(response);
+        return done(response, res);
     }
 
     @PostMapping("/login/verify")
-    public AuthResponse verifyLoginCode(@Valid @RequestBody LoginCodeRequest request, HttpServletRequest http) {
-        return authService.verifyLoginCode(request.getChallenge(), request.getCode(), clientIp(http), userAgent(http));
+    public ResponseEntity<AuthResponse> verifyLoginCode(@Valid @RequestBody LoginCodeRequest request, HttpServletRequest http, HttpServletResponse res) {
+        return done(
+                authService.verifyLoginCode(request.getChallenge(), request.getCode(), clientIp(http), userAgent(http)),
+                res);
+    }
+
+    /**
+     * The sign-in answer, finished: the token travels out as an HttpOnly
+     * cookie (AuthCookie), never in the body — the body only describes WHO
+     * signed in. A response that finished a sign-in (no challenge pending)
+     * carries the cookie; one asking for an emailed code does not, because
+     * it didn't sign anyone in.
+     */
+    private ResponseEntity<AuthResponse> done(AuthResponse response, HttpServletResponse res) {
+        if (response.getToken() != null) {
+            authCookie.write(res, response.getToken());
+            response.setToken(null);
+        }
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login/resend")
