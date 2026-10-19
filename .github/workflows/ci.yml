@@ -1,0 +1,105 @@
+# CI/CD for Ping.
+#
+# Two jobs, in order. Read them as a pipeline where the second job only ever
+# sees commits that survived the first:
+#
+#   push --> [test]  backend mvnw test + frontend tsc & build
+#              |
+#              ok?
+#              v
+#           [deploy] delivers the exact commit that passed to the server's
+#                    git repo -- whose post-receive hook does the actual
+#                    deployment (see deploy/post-receive + deploy/deploy.sh).
+#
+# So GitHub Actions never touches Docker, and the server never runs tests:
+# each machine does the one job it's good at, and they meet at the git push.
+
+name: CI/CD
+
+# WHEN does this run? On every push to main, on every pull request that
+# targets main, and also manually (workflow_dispatch shows a "Run workflow"
+# button on the Actions tab -- handy for testing the pipeline itself).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Two pushes to main in quick succession would otherwise run two deploys in
+# parallel and race each other docker-compose-ing the same stack. This makes
+# runs for the same branch queue up instead.
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 0 of every workflow: check the commit out onto the runner.
+      - uses: actions/checkout@v4
+
+      # Backend: Java 21 (matches pom.xml) with a warm Maven cache, then the
+      # exact command you run locally. If a test fails, the job fails, and
+      # nothing below it ever runs -- that is the whole point of CI.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Backend - run tests
+        working-directory: ping-Backend
+        run: ./mvnw -B test
+
+      # Frontend: typecheck (cheap, catches most breakage) and a production
+      # build (catches what only Next's compiler and bundler can see).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ping-frontend/package-lock.json
+      - name: Frontend - install
+        working-directory: ping-frontend
+        run: npm ci
+      - name: Frontend - typecheck
+        working-directory: ping-frontend
+        run: npx tsc --noEmit
+      - name: Frontend - production build
+        working-directory: ping-frontend
+        run: npm run build
+
+  deploy:
+    needs: test        # gate: only runs if EVERY test job passed
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Full history, not just the tip. The server is several commits behind
+      # in general, and a shallow clone cannot push commits it doesn't have.
+      # This is the 'fetch-depth: 0' lesson: default checkouts are shallow.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Reconstruct the deploy key on the runner from the encrypted repo
+      # secret, and pin the server's host key so ssh won't stop to ask
+      # "do you trust this host?" (there is nobody to click yes).
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/ping_deploy
+          chmod 600 ~/.ssh/ping_deploy
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Hand the commit to the server's bare repo over SSH. From here the
+      # post-receive hook takes over and does the docker rebuild on the
+      # server itself -- we intentionally do NOT build on the runner.
+      - name: Deliver commit to server (hook deploys it)
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/ping_deploy -o IdentitiesOnly=yes
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          git push ssh://root@$SERVER_HOST/opt/ping.git HEAD:refs/heads/main
