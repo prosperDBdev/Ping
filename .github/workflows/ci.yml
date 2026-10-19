@@ -90,7 +90,10 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/ping_deploy
+          # tr -d '\r' strips Windows carriage returns: the key was almost
+          # certainly pasted from a Windows browser, and OpenSSH rejects a
+          # key file that contains even one CR as "invalid format".
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/ping_deploy
           chmod 600 ~/.ssh/ping_deploy
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
