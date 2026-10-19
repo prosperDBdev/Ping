@@ -14,6 +14,13 @@ set -euo pipefail
 
 cd /opt/ping
 
+# A hook that runs inside the bare repo gets GIT_DIR='.' baked into its
+# environment, and every git command in here would otherwise follow that
+# (pointing at the bare repo, not at /opt/ping). Clear it so git uses THIS
+# directory's own repository. The gotcha of the century: it only breaks when
+# run FROM the hook.
+unset GIT_DIR GIT_WORK_TREE
+
 # origin IS the bare repo this hook lives in, so 'fetch origin main' picks up
 # exactly what was just pushed.
 git fetch origin main
