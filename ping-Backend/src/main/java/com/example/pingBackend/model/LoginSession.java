@@ -47,6 +47,11 @@ public class LoginSession {
     /** Updated at most every few minutes, not on every request. */
     private LocalDateTime lastActiveAt;
 
-    /** Same moment the token expires. A TTL index deletes the document after it. */
+    /**
+     * The last moment this session is valid. It slides forward every time the
+     * device is used (SessionService.touch): a session expires after seven
+     * days of INACTIVITY, not seven days after sign-in. A TTL index deletes
+     * the document once it passes.
+     */
     private LocalDateTime expiresAt;
 }

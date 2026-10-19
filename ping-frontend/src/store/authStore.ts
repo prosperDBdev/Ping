@@ -193,7 +193,13 @@ const useAuthStore = create<AuthState>()(
     }),
     {
       name: "ping-auth",
-      storage: createJSONStorage(() => sessionStorage),
+      // localStorage, not sessionStorage. sessionStorage dies the moment the
+      // tab is closed or thrown away — and mobile browsers discard
+      // background tabs aggressively, which is why people were signed out
+      // "after a day" even with a still-valid server session. The server
+      // session itself still expires (7 days of inactivity — see the
+      // backend's SessionService), so the window the user sees stays 7 days.
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         token: state.token,
         user: state.user,

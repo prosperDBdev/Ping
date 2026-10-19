@@ -18,9 +18,11 @@ const api = axios.create({
   },
 });
 
-// On app load, restore token from sessionStorage if it exists
+// On app load, restore token from localStorage if it exists. The store is
+// persisted there on purpose (see authStore) — sessionStorage would forget
+// it whenever the tab is closed or discarded by a mobile browser.
 if (typeof window !== "undefined") {
-  const stored = sessionStorage.getItem("ping-auth");
+  const stored = localStorage.getItem("ping-auth");
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
@@ -48,7 +50,7 @@ api.interceptors.response.use(
     const url: string = error?.config?.url || "";
 
     if (status === 401 && !url.startsWith("/auth")) {
-      sessionStorage.removeItem("ping-auth");
+      localStorage.removeItem("ping-auth");
       delete api.defaults.headers.common["Authorization"];
 
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth")) {

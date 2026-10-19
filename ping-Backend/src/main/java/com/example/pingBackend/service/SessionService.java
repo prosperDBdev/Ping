@@ -40,6 +40,18 @@ public class SessionService {
      */
     static final Duration TOUCH_INTERVAL = Duration.ofMinutes(5);
 
+    /**
+     * How long a device may sit unused before it's signed out — the
+     * "inactivity" clock, and the whole session policy in one number.
+     *
+     * Sliding, not absolute: every touch() below pushes expiresAt forward to
+     * "now plus this window", so a device that's used at least once every
+     * seven days stays signed in indefinitely, while one left alone for seven
+     * days is signed out by exactly the check that was already there. The
+     * token's own expiry claim (jwt.expiration) is only a hard cap on top.
+     */
+    static final Duration INACTIVITY_TIMEOUT = Duration.ofDays(7);
+
     private final LoginSessionRepository repository;
     private final MongoTemplate mongoTemplate;
     private final JwtTokenProvider jwtTokenProvider;
@@ -71,7 +83,9 @@ public class SessionService {
                 .method(method)
                 .createdAt(now)
                 .lastActiveAt(now)
-                .expiresAt(now.plus(jwtTokenProvider.lifetime()))
+                // Start the inactivity clock: a brand-new device gets the full
+                // window even before its first request after sign-in.
+                .expiresAt(now.plus(INACTIVITY_TIMEOUT))
                 .build());
         return new IssuedSession(session.getId(), jwtTokenProvider.generateToken(user.getUsername(), session.getId()));
     }
@@ -92,14 +106,22 @@ public class SessionService {
                 .filter(s -> s.getExpiresAt() != null && s.getExpiresAt().isAfter(now));
     }
 
-    /** Record activity, at most once per TOUCH_INTERVAL. The condition keeps it to one write. */
+    /**
+     * Record activity, at most once per TOUCH_INTERVAL, and slide the expiry
+     * forward with it — both in the same single write. A device that keeps
+     * being used is never expired; a device that sits still for
+     * INACTIVITY_TIMEOUT falls behind expiresAt and findActive() refuses it.
+     * The condition keeps it to one write.
+     */
     public void touch(LoginSession session) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime staleBefore = now.minus(TOUCH_INTERVAL);
         if (session.getLastActiveAt() == null || session.getLastActiveAt().isBefore(staleBefore)) {
             mongoTemplate.updateFirst(
                     query(where("_id").is(session.getId()).and("lastActiveAt").lt(staleBefore)),
-                    new Update().set("lastActiveAt", now),
+                    new Update()
+                            .set("lastActiveAt", now)
+                            .set("expiresAt", now.plus(INACTIVITY_TIMEOUT)),
                     LoginSession.class);
         }
     }

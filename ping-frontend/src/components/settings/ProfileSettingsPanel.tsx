@@ -203,9 +203,17 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
         Profile & settings
       </h1>
 
-      <div className="grid gap-8 lg:grid-cols-[320px_1fr] max-w-4xl">
+      {/* min-w-0 on the grid children matters. Grid items refuse to shrink
+          below their content's min-content width, and several rows here carry
+          truncate text — nowrap by definition — for which that width is the
+          whole line. On a 360px phone that inflated the columns to ~368px
+          inside a 328px container, so every card stuck past the right edge of
+          the screen and the panel became horizontally scrollable. min-w-0
+          (and the minmax(0,1fr) track) makes the children shrinkable again;
+          the rows still truncate because the row internals already clip. */}
+      <div className="grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)] w-full max-w-4xl">
         {/* Profile card */}
-        <div>
+        <div className="min-w-0">
           <div className="bg-ping-cream-dark dark:bg-ping-night-card rounded-3xl p-6 border border-ping-sand/60 dark:border-ping-night-border text-center">
             <div className="relative inline-block mb-4">
               <Avatar
@@ -280,7 +288,7 @@ export default function ProfileSettingsPanel({ onBack }: ProfileSettingsPanelPro
         </div>
 
         {/* Right column */}
-        <div className="space-y-8">
+        <div className="space-y-8 min-w-0">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ping-text-light dark:text-ping-night-text-light mb-3">
               Profile

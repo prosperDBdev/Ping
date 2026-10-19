@@ -5,6 +5,24 @@ import { useRouter } from "next/navigation";
 import useAuthStore from "@/store/authStore";
 import api from "@/lib/api";
 
+/**
+ * How long a server-side verification stays trusted. Navigating to another
+ * tab inside that window skips the /users/me round trip entirely.
+ */
+const VERIFICATION_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * The token whose owner was last verified with the server, and when that was.
+ *
+ * Module-level on purpose: the component unmounts and remounts on every route
+ * change (each protected page's layout renders its own), and a component can
+ * remember NOTHING across that — but a module does. This is what makes tab
+ * switches instant: every mount used to await a fresh GET /users/me before
+ * rendering anything, so every tap on a tab showed the spinner and a network
+ * round trip for a fact the app had checked seconds ago.
+ */
+let lastVerified: { token: string; at: number } | null = null;
+
 export default function ProtectedRoute({
   children,
 }: {
@@ -46,12 +64,28 @@ export default function ProtectedRoute({
         return;
       }
 
+      // Already verified this token for this browsing session: render now.
+      // The token can still BE rejected server-side on any real request (a
+      // revoked or expired session returns 401, and the api interceptor in
+      // lib/api signs the browser out globally), so nothing is trusted past
+      // its welcome — this only skips re-asking an already-answered question.
+      if (
+        lastVerified &&
+        lastVerified.token === currentToken &&
+        Date.now() - lastVerified.at < VERIFICATION_TTL_MS
+      ) {
+        setIsChecking(false);
+        return;
+      }
+
       // Re-set the Authorization header
       api.defaults.headers.common["Authorization"] = `Bearer ${currentToken}`;
 
       try {
         await fetchCurrentUser();
+        lastVerified = { token: currentToken, at: Date.now() };
       } catch {
+        lastVerified = null;
         logout();
         router.push("/auth/login");
       } finally {
