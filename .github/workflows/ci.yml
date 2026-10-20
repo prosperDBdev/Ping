@@ -120,6 +120,6 @@ jobs:
       - name: Deliver commit to server (hook deploys it)
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/ping_deploy -o IdentitiesOnly=yes
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_HOST: ${{ secrets.SERVERHOST }}
         run: |
           git push ssh://root@$SERVER_HOST/opt/ping.git HEAD:refs/heads/main
