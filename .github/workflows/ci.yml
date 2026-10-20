@@ -85,9 +85,12 @@ jobs:
       # secret, and pin the server's host key so ssh won't stop to ask
       # "do you trust this host?" (there is nobody to click yes).
       - name: Set up SSH
+        # Where the runner reads its credentials from: the repository's
+        # encrypted secrets (Settings > Secrets and variables > Actions).
+        # The names without underscores match what's stored there.
         env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_KEY: ${{ secrets.DEPLOYSSHKEY }}
+          SERVER_HOST: ${{ secrets.SERVERHOST }}
         run: |
           mkdir -p ~/.ssh
           # tr -d '\r' strips Windows carriage returns: the key was almost
