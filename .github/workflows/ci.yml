@@ -95,7 +95,21 @@ jobs:
           # key file that contains even one CR as "invalid format".
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/ping_deploy
           chmod 600 ~/.ssh/ping_deploy
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # Prove the key actually parses RIGHT NOW instead of failing
+          # mysteriously deep inside git push later.
+          if ssh-keygen -y -f ~/.ssh/ping_deploy > /dev/null 2>&1; then
+            echo "deploy key parses OK"
+          else
+            echo "!! deploy key does NOT parse - check the DEPLOY_SSH_KEY secret"
+            exit 1
+          fi
+          # Print the host's LENGTH, not its value -- a paste with a stray
+          # trailing newline or space shows up as a wrong length (13 = clean).
+          echo "SERVER_HOST length (expect 13): $(echo -n "$SERVER_HOST" | wc -c)"
+          # Normalize the host the same way as the key, then:
+          # NO 2>/dev/null this time -- keyscan's error text IS the diagnosis.
+          SERVER_HOST=$(echo "$SERVER_HOST" | tr -d '\r\n ')
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
       # Hand the commit to the server's bare repo over SSH. From here the
       # post-receive hook takes over and does the docker rebuild on the
